@@ -185,6 +185,72 @@ func TestCancelKeysQuitWithCancelled(t *testing.T) {
 	}
 }
 
+func TestCheckTogglesWorktreeItem(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true) // cursor starts on "main", which has a worktree
+	m = send(t, m, key('c'))
+	if m.quitting {
+		t.Fatal("checking an item should not quit the program")
+	}
+	checked := m.Checked()
+	if len(checked) != 1 || checked[0].Branch != "main" {
+		t.Fatalf("Checked() = %+v, want [main]", checked)
+	}
+
+	m = send(t, m, key('c'))
+	if len(m.Checked()) != 0 {
+		t.Fatalf("Checked() after second toggle = %+v, want empty", m.Checked())
+	}
+}
+
+func TestCheckIgnoredOnItemWithoutWorktree(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('j'), key('c')) // -> bugfix/api-timeout, no worktree
+	if len(m.Checked()) != 0 {
+		t.Fatalf("Checked() = %+v, want empty for item without a worktree", m.Checked())
+	}
+}
+
+func TestCheckedItemsPersistAcrossCursorMovement(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('c'), key('j'), key('j'), key('j'), key('c')) // check main, check release/2.1
+	checked := m.Checked()
+	if len(checked) != 2 || checked[0].Branch != "main" || checked[1].Branch != "release/2.1" {
+		t.Fatalf("Checked() = %+v, want [main, release/2.1]", checked)
+	}
+}
+
+func TestViewShowsCheckboxState(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	view := m.View()
+	if !strings.Contains(view, "[ ] ● main") {
+		t.Fatalf("View() missing unchecked box for main:\n%s", view)
+	}
+
+	m = send(t, m, key('c'))
+	view = m.View()
+	if !strings.Contains(view, "[x] ● main") {
+		t.Fatalf("View() missing checked box for main:\n%s", view)
+	}
+
+	m = send(t, m, key('j'), key('j')) // bugfix/api-timeout, no worktree
+	view = m.View()
+	line := lineContaining(view, "bugfix/api-timeout")
+	if strings.Contains(line, "[") {
+		t.Fatalf("View() should render no checkbox for item without a worktree:\n%s", line)
+	}
+}
+
+// lineContaining returns the first line of view containing substr, for
+// assertions that only care about one row of a multi-line View() output.
+func lineContaining(view, substr string) string {
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, substr) {
+			return line
+		}
+	}
+	return ""
+}
+
 func TestHelpOverlayReturnsToList(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
@@ -210,7 +276,7 @@ func TestViewKeepsCursorInsideTerminalHeight(t *testing.T) {
 	if strings.Count(view, "\n") != 4 {
 		t.Fatalf("View() rendered %d lines, want 4:\n%s", strings.Count(view, "\n"), view)
 	}
-	if !strings.Contains(view, "> ○ branch-9") || strings.Contains(view, "branch-0") {
+	if last := lineContaining(view, "branch-9"); !strings.HasPrefix(last, ">") || strings.Contains(view, "branch-0") {
 		t.Fatalf("View() did not keep cursor visible:\n%s", view)
 	}
 }
