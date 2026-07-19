@@ -112,7 +112,7 @@ func applyResult(t *testing.T, result ui.Result) string {
 func TestIntegrationSwitchPlainBranchInPlace(t *testing.T) {
 	repo := t.TempDir()
 	initRepo(t, repo)
-	runGit(t, repo, "branch", "alpha") // alphabetically first, no worktree
+	runGit(t, repo, "branch", "alpha") // plain branch, listed after current worktree
 	chdir(t, repo)
 
 	items, err := gitdata.Collect()
@@ -125,7 +125,7 @@ func TestIntegrationSwitchPlainBranchInPlace(t *testing.T) {
 	}
 
 	m := ui.New(items, top, "", true)
-	result := drivePicker(t, m, keyEnter, keyRune('s')) // cursor starts on "alpha"
+	result := drivePicker(t, m, keyDown, keyEnter, keyRune('s'))
 
 	dest := applyResult(t, result)
 	if dest != "" {
@@ -188,7 +188,7 @@ func TestIntegrationCreateWorktreeForBranch(t *testing.T) {
 	}
 
 	m := ui.New(items, top, "", true)
-	result := drivePicker(t, m, keyEnter, keyRune('w')) // cursor starts on "alpha"
+	result := drivePicker(t, m, keyDown, keyEnter, keyRune('w'))
 
 	dest := applyResult(t, result)
 	if dest == "" {
