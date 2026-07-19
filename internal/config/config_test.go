@@ -14,7 +14,9 @@ func TestDefault(t *testing.T) {
 }
 
 func TestLoadMissingFileReturnsDefaults(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -27,6 +29,7 @@ func TestLoadMissingFileReturnsDefaults(t *testing.T) {
 func TestLoadFillsPartialFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := filepath.Join(home, ".config", "wt")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
