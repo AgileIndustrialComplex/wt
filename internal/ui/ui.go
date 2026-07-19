@@ -33,7 +33,7 @@ type Result struct {
 	Item            gitdata.Item
 	Resolution      string         // config.ActionSwitch or config.ActionWorktree, set only when Item has no worktree
 	NewWorktreePath string         // suggested path, set only when Resolution == config.ActionWorktree
-	Delete          []gitdata.Item // set when the user confirmed bulk deletion of the marked worktrees
+	Delete          []gitdata.Item // set when the user confirmed bulk deletion of the marked branches
 }
 
 // Model is the bubbletea model for the picker.
@@ -113,7 +113,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // updateConfirmDelete handles the approval step shown after pressing D with
-// at least one worktree marked. Enter confirms and quits with the marked
+// at least one branch marked. Enter confirms and quits with the marked
 // items in Result.Delete; any cancel key stops the operation and returns to
 // the list without quitting the picker.
 func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
