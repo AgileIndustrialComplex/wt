@@ -125,6 +125,38 @@ func TestCollectMovesCurrentItemFirst(t *testing.T) {
 	}
 }
 
+func TestCollectMovesCurrentFirstPreservingRemainingOrder(t *testing.T) {
+	fr := fakeRunner{
+		"worktree": strings.Join([]string{
+			"worktree /repo/proj-current",
+			"HEAD abc123",
+			"branch refs/heads/z-current",
+			"",
+			"worktree /repo/proj-scratch",
+			"HEAD def456",
+			"detached",
+			"",
+		}, "\x00"),
+		"branch":    "a-first\nb-middle\nz-current\n",
+		"rev-parse": "/repo/proj-current\n",
+	}
+
+	items, err := collect(fr.run)
+	if err != nil {
+		t.Fatalf("collect() error = %v", err)
+	}
+
+	want := []Item{
+		{Branch: "z-current", Path: "/repo/proj-current", IsCurrent: true},
+		{Branch: "a-first"},
+		{Branch: "b-middle"},
+		{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true},
+	}
+	if !reflect.DeepEqual(items, want) {
+		t.Fatalf("collect() = %#v, want %#v", items, want)
+	}
+}
+
 func TestParseWorktreePorcelainPreservesSpecialPath(t *testing.T) {
 	out := "worktree /repo/café folder\\name\x00HEAD abc123\x00detached\x00\x00"
 	got := parseWorktreePorcelain(out)
