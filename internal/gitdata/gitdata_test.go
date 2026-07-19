@@ -1,11 +1,30 @@
 package gitdata
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestRunGitUsesStableLocale(t *testing.T) {
+	dir := t.TempDir()
+	git := filepath.Join(dir, "git")
+	script := "#!/bin/sh\nif [ \"$LC_ALL\" = C ]; then\n  echo 'fatal: not a git repository' >&2\nelse\n  echo 'fatal: kein Git-Repository' >&2\nfi\nexit 128\n"
+	if err := os.WriteFile(git, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("LC_ALL", "de_DE.UTF-8")
+
+	_, err := runGit("worktree", "list")
+	if !errors.Is(err, ErrNotAGitRepo) {
+		t.Fatalf("runGit() error = %v, want ErrNotAGitRepo", err)
+	}
+}
 
 func TestParseWorktreePorcelain(t *testing.T) {
 	out := strings.Join([]string{
