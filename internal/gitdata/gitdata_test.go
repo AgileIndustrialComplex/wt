@@ -44,6 +44,7 @@ func TestParseWorktreePorcelain(t *testing.T) {
 		"worktree /repo/proj-scratch",
 		"HEAD jkl012",
 		"detached",
+		"prunable gitdir file points to non-existent location",
 		"",
 	}, "\x00")
 
@@ -52,7 +53,7 @@ func TestParseWorktreePorcelain(t *testing.T) {
 		{path: "/repo/proj", branch: "main"},
 		{path: "/repo/proj-login", branch: "feature/login"},
 		{path: "/repo/proj-release", branch: "release/2.1", locked: true},
-		{path: "/repo/proj-scratch", detached: true},
+		{path: "/repo/proj-scratch", detached: true, prunable: true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseWorktreePorcelain() = %#v, want %#v", got, want)
@@ -109,13 +110,13 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 			"detached",
 			"",
 		}, "\x00"),
-		"branch --list --format=%(refname:short)":   "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
-		"branch --format=%(refname:short) --merged": "main\nbugfix/api-timeout\n",
-		"rev-parse --show-toplevel":                 "/repo/proj\n",
-		"-C /repo/proj status --porcelain":          "",
-		"-C /repo/proj-login status --porcelain":    "",
-		"-C /repo/proj-release status --porcelain":  "",
-		"-C /repo/proj-scratch status --porcelain":  "",
+		"branch --list --format=%(refname:short)":                        "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
+		"branch --format=%(refname:short) --merged":                      "main\nbugfix/api-timeout\n",
+		"rev-parse --show-toplevel":                                      "/repo/proj\n",
+		"-C /repo/proj status --porcelain --untracked-files=all":         "",
+		"-C /repo/proj-login status --porcelain --untracked-files=all":   "",
+		"-C /repo/proj-release status --porcelain --untracked-files=all": "",
+		"-C /repo/proj-scratch status --porcelain --untracked-files=all": "",
 	}
 
 	items, err := collect(fr.run)
@@ -137,11 +138,11 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 
 func TestCollectMovesCurrentItemFirst(t *testing.T) {
 	fr := fakeRunner{
-		"worktree list --porcelain -z":              "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/z-current\x00",
-		"branch --list --format=%(refname:short)":   "a-first\nz-current\n",
-		"branch --format=%(refname:short) --merged": "a-first\nz-current\n",
-		"rev-parse --show-toplevel":                 "/repo/proj\n",
-		"-C /repo/proj status --porcelain":          "",
+		"worktree list --porcelain -z":                           "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/z-current\x00",
+		"branch --list --format=%(refname:short)":                "a-first\nz-current\n",
+		"branch --format=%(refname:short) --merged":              "a-first\nz-current\n",
+		"rev-parse --show-toplevel":                              "/repo/proj\n",
+		"-C /repo/proj status --porcelain --untracked-files=all": "",
 	}
 	items, err := collect(fr.run)
 	if err != nil {
@@ -164,11 +165,11 @@ func TestCollectMovesCurrentFirstPreservingRemainingOrder(t *testing.T) {
 			"detached",
 			"",
 		}, "\x00"),
-		"branch --list --format=%(refname:short)":   "a-first\nb-middle\nz-current\n",
-		"branch --format=%(refname:short) --merged": "a-first\nb-middle\nz-current\n",
-		"rev-parse --show-toplevel":                 "/repo/proj-current\n",
-		"-C /repo/proj-current status --porcelain":  "",
-		"-C /repo/proj-scratch status --porcelain":  "",
+		"branch --list --format=%(refname:short)":                        "a-first\nb-middle\nz-current\n",
+		"branch --format=%(refname:short) --merged":                      "a-first\nb-middle\nz-current\n",
+		"rev-parse --show-toplevel":                                      "/repo/proj-current\n",
+		"-C /repo/proj-current status --porcelain --untracked-files=all": "",
+		"-C /repo/proj-scratch status --porcelain --untracked-files=all": "",
 	}
 
 	items, err := collect(fr.run)
@@ -221,11 +222,11 @@ func TestCollectMarksDirtyWorktrees(t *testing.T) {
 			"branch refs/heads/feature/login",
 			"",
 		}, "\x00"),
-		"branch --list --format=%(refname:short)":   "main\nfeature/login\n",
-		"branch --format=%(refname:short) --merged": "main\nfeature/login\n",
-		"rev-parse --show-toplevel":                 "/repo/proj\n",
-		"-C /repo/proj status --porcelain":          "",
-		"-C /repo/proj-login status --porcelain":    " M tracked.go\n?? scratch.txt\n",
+		"branch --list --format=%(refname:short)":                      "main\nfeature/login\n",
+		"branch --format=%(refname:short) --merged":                    "main\nfeature/login\n",
+		"rev-parse --show-toplevel":                                    "/repo/proj\n",
+		"-C /repo/proj status --porcelain --untracked-files=all":       "",
+		"-C /repo/proj-login status --porcelain --untracked-files=all": " M tracked.go\n?? scratch.txt\n",
 	}
 
 	items, err := collect(fr.run)
@@ -248,10 +249,38 @@ func TestCollectPropagatesStatusErrors(t *testing.T) {
 		"branch --list --format=%(refname:short)":   "main\n",
 		"branch --format=%(refname:short) --merged": "main\n",
 		"rev-parse --show-toplevel":                 "/repo/proj\n",
-		// "-C /repo/proj status --porcelain" deliberately omitted -> "unexpected" error
+		// Status response deliberately omitted to produce an unexpected-subcommand error.
 	}
 	if _, err := collect(fr.run); err == nil {
 		t.Fatal("collect() error = nil, want error when git status fails")
+	}
+}
+
+func TestCollectSkipsStatusForPrunableWorktrees(t *testing.T) {
+	fr := fakeRunner{
+		"worktree list --porcelain -z": strings.Join([]string{
+			"worktree /repo/proj",
+			"HEAD abc123",
+			"branch refs/heads/main",
+			"",
+			"worktree /repo/missing",
+			"HEAD def456",
+			"branch refs/heads/stale",
+			"prunable gitdir file points to non-existent location",
+			"",
+		}, "\x00"),
+		"branch --list --format=%(refname:short)":                "main\nstale\n",
+		"branch --format=%(refname:short) --merged":              "main\nstale\n",
+		"rev-parse --show-toplevel":                              "/repo/proj\n",
+		"-C /repo/proj status --porcelain --untracked-files=all": "",
+	}
+
+	items, err := collect(fr.run)
+	if err != nil {
+		t.Fatalf("collect() error = %v", err)
+	}
+	if len(items) != 2 || items[1].Path != "/repo/missing" || items[1].Dirty {
+		t.Fatalf("collect() = %#v, want clean stale worktree without status probe", items)
 	}
 }
 
