@@ -95,6 +95,32 @@ func TestDeleteWorktreesWithSkipsBranchDeleteOnWorktreeRemoveFailure(t *testing.
 	}
 }
 
+func TestDeleteWorktreesWithRejectsCurrentWorktree(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "main", Path: "/repo/proj", IsCurrent: true}
+
+	err := deleteWorktreesWith(run, []gitdata.Item{item})
+	if err == nil || !strings.Contains(err.Error(), "current worktree") {
+		t.Fatalf("deleteWorktreesWith() error = %v, want current worktree error", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("git calls = %v, want none", *calls)
+	}
+}
+
+func TestDeleteWorktreesWithDetachedSkipsBranchDelete(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true}
+
+	if err := deleteWorktreesWith(run, []gitdata.Item{item}); err != nil {
+		t.Fatalf("deleteWorktreesWith() error = %v", err)
+	}
+	want := [][]string{{"worktree", "remove", "/repo/proj-scratch"}}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
 func TestDeleteWorktreesWithContinuesAfterFailureAndCombinesErrors(t *testing.T) {
 	run := func(args ...string) error {
 		if args[0] == "worktree" && args[2] == "/repo/proj-login" {
