@@ -324,6 +324,60 @@ func TestIntegrationDeleteUnmergedBranchRequiresForcePhrase(t *testing.T) {
 	}
 }
 
+func TestIntegrationDeleteDirtyWorktreeRequiresForcePhrase(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	wtDir := filepath.Join(t.TempDir(), "scratch-wt-checkout")
+	runGit(t, repo, "worktree", "add", "-b", "scratch", wtDir)
+	if err := os.WriteFile(filepath.Join(wtDir, "untracked.txt"), []byte("scratch"), 0o644); err != nil {
+		t.Fatalf("write untracked file: %v", err)
+	}
+	chdir(t, repo)
+
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	var scratch *gitdata.Item
+	for i := range items {
+		if items[i].Branch == "scratch" {
+			scratch = &items[i]
+		}
+	}
+	if scratch == nil || !scratch.Dirty {
+		t.Fatalf("items = %+v, want a scratch branch marked Dirty", items)
+	}
+
+	// order: main (cursor 0), scratch (cursor 1) -> down, mark, D, Enter
+	// (opens the force-delete phrase prompt), type the required phrase, Enter.
+	keys := []tea.KeyMsg{keyDown, keyRune('c'), keyRune('D'), keyEnter}
+	for _, r := range ui.ForceDeleteConfirmPhrase {
+		keys = append(keys, keyRune(r))
+	}
+	keys = append(keys, keyEnter)
+
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keys...)
+
+	if len(result.Delete) != 1 || result.Delete[0].Branch != "scratch" {
+		t.Fatalf("result.Delete = %+v, want [scratch]", result.Delete)
+	}
+	applyResult(t, result)
+
+	if _, err := os.Stat(wtDir); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir %q still exists after force delete", wtDir)
+	}
+	branches := runGit(t, repo, "branch", "--list", "scratch")
+	if strings.TrimSpace(branches) != "" {
+		t.Fatalf("branch scratch still exists after force delete: %q", branches)
+	}
+}
+
 func worktreePathForBranch(t *testing.T, repo, branch string) string {
 	t.Helper()
 	out := runGit(t, repo, "worktree", "list", "--porcelain")

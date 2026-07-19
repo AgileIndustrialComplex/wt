@@ -112,6 +112,10 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 		"branch --list --format=%(refname:short)":   "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
 		"branch --format=%(refname:short) --merged": "main\nbugfix/api-timeout\n",
 		"rev-parse --show-toplevel":                 "/repo/proj\n",
+		"-C /repo/proj status --porcelain":          "",
+		"-C /repo/proj-login status --porcelain":    "",
+		"-C /repo/proj-release status --porcelain":  "",
+		"-C /repo/proj-scratch status --porcelain":  "",
 	}
 
 	items, err := collect(fr.run)
@@ -137,6 +141,7 @@ func TestCollectMovesCurrentItemFirst(t *testing.T) {
 		"branch --list --format=%(refname:short)":   "a-first\nz-current\n",
 		"branch --format=%(refname:short) --merged": "a-first\nz-current\n",
 		"rev-parse --show-toplevel":                 "/repo/proj\n",
+		"-C /repo/proj status --porcelain":          "",
 	}
 	items, err := collect(fr.run)
 	if err != nil {
@@ -162,6 +167,8 @@ func TestCollectMovesCurrentFirstPreservingRemainingOrder(t *testing.T) {
 		"branch --list --format=%(refname:short)":   "a-first\nb-middle\nz-current\n",
 		"branch --format=%(refname:short) --merged": "a-first\nb-middle\nz-current\n",
 		"rev-parse --show-toplevel":                 "/repo/proj-current\n",
+		"-C /repo/proj-current status --porcelain":  "",
+		"-C /repo/proj-scratch status --porcelain":  "",
 	}
 
 	items, err := collect(fr.run)
@@ -199,6 +206,52 @@ func TestCollectMarksUnmergedBranches(t *testing.T) {
 	}
 	if !reflect.DeepEqual(items, want) {
 		t.Fatalf("collect() = %#v, want %#v", items, want)
+	}
+}
+
+func TestCollectMarksDirtyWorktrees(t *testing.T) {
+	fr := fakeRunner{
+		"worktree list --porcelain -z": strings.Join([]string{
+			"worktree /repo/proj",
+			"HEAD abc123",
+			"branch refs/heads/main",
+			"",
+			"worktree /repo/proj-login",
+			"HEAD def456",
+			"branch refs/heads/feature/login",
+			"",
+		}, "\x00"),
+		"branch --list --format=%(refname:short)":   "main\nfeature/login\n",
+		"branch --format=%(refname:short) --merged": "main\nfeature/login\n",
+		"rev-parse --show-toplevel":                 "/repo/proj\n",
+		"-C /repo/proj status --porcelain":          "",
+		"-C /repo/proj-login status --porcelain":    " M tracked.go\n?? scratch.txt\n",
+	}
+
+	items, err := collect(fr.run)
+	if err != nil {
+		t.Fatalf("collect() error = %v", err)
+	}
+
+	want := []Item{
+		{Branch: "main", Path: "/repo/proj", IsCurrent: true},
+		{Branch: "feature/login", Path: "/repo/proj-login", Dirty: true},
+	}
+	if !reflect.DeepEqual(items, want) {
+		t.Fatalf("collect() = %#v, want %#v", items, want)
+	}
+}
+
+func TestCollectPropagatesStatusErrors(t *testing.T) {
+	fr := fakeRunner{
+		"worktree list --porcelain -z":              "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/main\x00",
+		"branch --list --format=%(refname:short)":   "main\n",
+		"branch --format=%(refname:short) --merged": "main\n",
+		"rev-parse --show-toplevel":                 "/repo/proj\n",
+		// "-C /repo/proj status --porcelain" deliberately omitted -> "unexpected" error
+	}
+	if _, err := collect(fr.run); err == nil {
+		t.Fatal("collect() error = nil, want error when git status fails")
 	}
 }
 

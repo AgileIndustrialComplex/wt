@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more branches (and their worktrees, where present) in bulk, via a mark-then-confirm flow. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`, `branch -d`, or explicitly confirmed `branch -D`) happens only after user confirmation, and only via standard `git` invocations.
+`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more branches (and their worktrees, where present) in bulk, via a mark-then-confirm flow. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove` or explicitly confirmed `worktree remove --force`, `branch -d`, or explicitly confirmed `branch -D`) happens only after user confirmation, and only via standard `git` invocations.
 
 ## 2. Technology Choice
 
@@ -32,12 +32,13 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 │  cmd/wt (main)      │  parses flags, loads config, wires everything
 └─────────┬───────────┘
           │
-┌─────────▼───────────┐     ┌────────────────────┐
-│  gitdata (collector) │────▶│  git branch --list  │
-│                      │     │  git worktree list  │
-│  - parses branches   │     │  git rev-parse ...  │
-│  - parses worktrees  │     └────────────────────┘
-│  - merges into Items │
+┌─────────▼───────────┐     ┌──────────────────────┐
+│  gitdata (collector) │────▶│  git branch --list   │
+│                      │     │  git worktree list   │
+│  - parses branches   │     │  git rev-parse ...   │
+│  - parses worktrees  │     │  git status          │
+│  - merges into Items │     │    --porcelain       │
+│                      │     └──────────────────────┘
 └─────────┬───────────┘
           │  []Item{Name, Path, IsWorktree, IsCurrent, Locked, ...}
 ┌─────────▼───────────┐
@@ -50,14 +51,14 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 │  - plain branch  → git switch <branch>       (in cwd repo)
 │  - worktree path → emit cd path to wrapper   (no git mutation)
 │  - existing path → return it to the shell wrapper
-│  - marked set    → git worktree remove (if any) + git branch -d/-D, per item
+│  - marked set    → git worktree remove (--force if dirty) + git branch -d/-D, per item
 └──────────────────────┘
 ```
 
 **Data flow:**
-1. `gitdata` runs `git branch --list --format='%(refname:short)'`, `git branch --format='%(refname:short)' --merged`, and `git worktree list --porcelain -z`, parses their output, and produces a single normalized list of items, cross-referencing merge status and which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
+1. `gitdata` runs `git branch --list --format='%(refname:short)'`, `git branch --format='%(refname:short)' --merged`, `git worktree list --porcelain -z`, and `git status --porcelain` scoped to each worktree's path, parses their output, and produces a single normalized list of items, cross-referencing merge status, dirty (modified/untracked) status, and which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
 2. `ui` renders the list, handles keystrokes purely as state transitions (no side effects) until the user confirms.
-3. `action` executes exactly one of: `git switch`, `git worktree add`, a directory change (for worktrees), or — after the mark-then-`D`-then-confirm flow — `git worktree remove` (only for marked items that have a worktree) followed by `git branch -d` for merged branches or, after phrase-typed confirmation, `git branch -D` for unmerged branches.
+3. `action` executes exactly one of: `git switch`, `git worktree add`, a directory change (for worktrees), or — after the mark-then-`D`-then-confirm flow — `git worktree remove` (only for marked items that have a worktree; `--force` for worktrees with modified or untracked files, after phrase-typed confirmation) followed by `git branch -d` for merged branches or, after phrase-typed confirmation, `git branch -D` for unmerged branches.
 
 **Directory-change trick:** a subprocess cannot change its parent shell's `cwd`. `wt` handles this the same way `zoxide`/`fzf`-based `cd` wrappers do — see §5.
 
@@ -88,36 +89,47 @@ Selecting a plain branch with no worktree and confirming prompts one extra line:
 ```
 This directly resolves the stated pain point: instead of `git switch` erroring out, the tool offers the two valid resolutions inline.
 
-**Deleting branches with unmerged changes:** `git branch -d` (the non-force
-delete `wt` uses for merged branches) refuses branches not fully merged.
-`wt` detects this ahead of time — each
-`Item` carries an `Unmerged` flag computed from `git branch --merged` during
-collection — and if any branch in the marked set is unmerged, confirming the
-normal delete screen (`D` then `Enter`) does not delete anything yet.
-Instead a second screen appears:
+**Deleting branches with unmerged changes, or worktrees with untracked
+files:** `git branch -d` (the non-force delete `wt` uses for merged
+branches) refuses branches not fully merged, and `git worktree remove`
+(the non-force removal `wt` uses by default) refuses worktrees with modified
+or untracked files. `wt` detects both ahead of time — each `Item` carries an
+`Unmerged` flag computed from `git branch --merged`, and a `Dirty` flag
+computed from `git status --porcelain` scoped to the worktree's path, both
+during collection — and if any branch in the marked set is unmerged, or any
+worktree in the marked set is dirty, confirming the normal delete screen
+(`D` then `Enter`) does not delete anything yet. Instead a second screen
+appears:
 
 ```
 The following branch(es) have unmerged changes and will be permanently lost:
   feature/wip-thing
+The following worktree(s) have modified or untracked files that will be permanently lost:
+  scratch/notes  ../proj-scratch
 Type "delete" and press Enter to proceed, or Esc to cancel:
 
 > _
 ```
 
-- This screen only appears when at least one marked branch is unmerged;
-  marked sets containing only merged branches delete exactly as before,
-  with no extra step.
+- This screen only appears when at least one marked branch is unmerged or
+  at least one marked worktree is dirty; each condition contributes its own
+  section to the screen, and either section is omitted when it has nothing
+  to list. Marked sets that are entirely merged and clean delete exactly as
+  before, with no extra step.
 - The user must type **"delete"** exactly (case-sensitive) and press `Enter`
   to proceed; any mismatch is rejected and the input stays open for
   correction. `Esc` or `Ctrl-C` cancels the whole batch — including any
-  merged branches marked alongside the unmerged one(s) — and returns to the
-  list without touching Git state or losing the marked selection.
-- Once confirmed, `wt` deletes the batch in one pass: merged branches via
-  `git branch -d` as before, unmerged branches via `git branch -D` (force),
-  since explicit, phrase-level consent was already obtained.
+  merged or clean items marked alongside the unmerged/dirty one(s) — and
+  returns to the list without touching Git state or losing the marked
+  selection.
+- Once confirmed, `wt` deletes the batch in one pass: `git worktree remove`
+  as before, or `git worktree remove --force` for dirty worktrees; then
+  `git branch -d` as before, or `git branch -D` (force) for unmerged
+  branches — since explicit, phrase-level consent was already obtained.
 - Detached-HEAD worktree entries (which have no associated branch to
   delete) are excluded from the unmerged check and never trigger this
-  screen on their own.
+  screen on their own, though they can still trigger it via the dirty
+  check if they have modified or untracked files.
 
 ## 5. Implementation Details
 

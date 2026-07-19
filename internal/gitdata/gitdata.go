@@ -25,6 +25,7 @@ type Item struct {
 	Locked    bool
 	Detached  bool
 	Unmerged  bool // true if the branch is not fully merged into HEAD (git branch -d would refuse it)
+	Dirty     bool // true if the worktree has modified or untracked files (git worktree remove would refuse it)
 }
 
 // HasWorktree reports whether the branch is checked out anywhere.
@@ -123,6 +124,11 @@ func collect(run runnerFunc) ([]Item, error) {
 			item.Path = w.path
 			item.Locked = w.locked
 			item.IsCurrent = normalizePath(w.path) == top
+			dirty, err := isDirty(run, w.path)
+			if err != nil {
+				return nil, err
+			}
+			item.Dirty = dirty
 		}
 		items = append(items, item)
 	}
@@ -130,12 +136,17 @@ func collect(run runnerFunc) ([]Item, error) {
 		if !w.detached {
 			continue
 		}
+		dirty, err := isDirty(run, w.path)
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, Item{
 			Branch:    "(detached)",
 			Path:      w.path,
 			IsCurrent: normalizePath(w.path) == top,
 			Locked:    w.locked,
 			Detached:  true,
+			Dirty:     dirty,
 		})
 	}
 	for i := range items {
@@ -205,4 +216,15 @@ func parseLines(out string) []string {
 
 func normalizePath(p string) string {
 	return filepath.Clean(p)
+}
+
+// isDirty reports whether the worktree at path has modified or untracked
+// files — the same condition that makes `git worktree remove` (without
+// --force) refuse to delete it.
+func isDirty(run runnerFunc, path string) (bool, error) {
+	out, err := run("-C", path, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
