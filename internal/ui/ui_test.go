@@ -432,22 +432,32 @@ func TestForceDeleteBackspaceEditsInput(t *testing.T) {
 	}
 }
 
-func TestForceDeleteEscCancelsWithoutQuittingAndClearsInput(t *testing.T) {
-	items := testItems()
-	items[1].Unmerged = true
-	m := New(items, "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter), key('y'), keyType(tea.KeyEsc))
-	if m.mode != modeList {
-		t.Fatalf("mode after Esc in modeConfirmForceDelete = %v, want modeList", m.mode)
-	}
-	if m.quitting {
-		t.Fatal("Esc in modeConfirmForceDelete should not quit the program")
-	}
-	if len(m.Marked()) != 1 {
-		t.Fatalf("Marked() after cancelling force-delete = %+v, want [feature/login] (cancel should not clear marks)", m.Marked())
-	}
-	if m.forceConfirmInput != "" {
-		t.Fatalf("forceConfirmInput after cancel = %q, want empty", m.forceConfirmInput)
+func TestForceDeleteCancelPreservesMarksAndClearsInput(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyType
+	}{
+		{name: "Esc", key: tea.KeyEsc},
+		{name: "Ctrl-C", key: tea.KeyCtrlC},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			items := testItems()
+			items[1].Unmerged = true
+			m := New(items, "/repo/proj", "", true)
+			m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter), key('y'), keyType(tc.key))
+			if m.mode != modeList {
+				t.Fatalf("mode after %s in modeConfirmForceDelete = %v, want modeList", tc.name, m.mode)
+			}
+			if m.quitting {
+				t.Fatalf("%s in modeConfirmForceDelete should not quit the program", tc.name)
+			}
+			if len(m.Marked()) != 1 {
+				t.Fatalf("Marked() after cancelling force-delete = %+v, want [feature/login] (cancel should not clear marks)", m.Marked())
+			}
+			if m.forceConfirmInput != "" {
+				t.Fatalf("forceConfirmInput after cancel = %q, want empty", m.forceConfirmInput)
+			}
+		})
 	}
 }
 
