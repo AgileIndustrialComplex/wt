@@ -108,6 +108,19 @@ func TestDeleteWorktreesWithRejectsCurrentWorktree(t *testing.T) {
 	}
 }
 
+func TestDeleteWorktreesWithRejectsLockedWorktree(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "release/2.1", Path: "/repo/proj-release", Locked: true}
+
+	err := deleteWorktreesWith(run, []gitdata.Item{item})
+	if err == nil || !strings.Contains(err.Error(), "locked worktree") {
+		t.Fatalf("deleteWorktreesWith() error = %v, want locked worktree error", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("git calls = %v, want none", *calls)
+	}
+}
+
 func TestDeleteWorktreesWithDetachedSkipsBranchDelete(t *testing.T) {
 	run, calls := recordingRunner()
 	item := gitdata.Item{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true}
