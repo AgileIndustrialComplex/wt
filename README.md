@@ -56,6 +56,8 @@ Select branch or worktree (/ to filter, ? for help)
 
 Navigate with the arrow keys, `j`/`k`, or `Ctrl-N`/`Ctrl-P`. Jump to the top or bottom with `g`/`G`, page with `Ctrl-D`/`Ctrl-U`, and filter the list by typing `/` followed by a search term. Press `Enter` to confirm, or `Esc`/`Ctrl-C`/`q` to cancel.
 
+The picker uses color to distinguish the selected row, current worktree, worktree tags, locked worktrees, and filter prompt. Pass `--no-color` to disable all ANSI styling.
+
 Selecting a worktree changes your shell's directory to it. Selecting a plain branch with no worktree prompts you to either switch to it in place or create a new worktree for it:
 
 ```
@@ -67,7 +69,7 @@ Other flags:
 ```bash
 wt --path-only          # print a selected worktree path for shell integration
 wt --worktree-root DIR  # base directory to propose for new worktrees
-wt --no-color
+wt --no-color           # disable ANSI styling
 wt --version
 wt --help
 ```
