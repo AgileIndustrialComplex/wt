@@ -78,21 +78,9 @@ Select branch or worktree (/ to filter, ? for help)
 - `[worktree]` tags branches with a dedicated worktree; untagged branches are plain local branches with no worktree.
 - `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks or removes worktrees.
 - The directory path is shown only for the currently highlighted item; moving the cursor reveals that item's path and hides the previous one.
-- Highlighting a worktree item and pressing `m` marks or unmarks it. The `[x]`/`[ ]` marker column appears after the first mark and disappears after the last mark is removed. Marked state persists as the cursor moves and across filtering. Branches with no worktree cannot be marked. Marking is purely a persistent UI marker in this version — no action consumes it yet, and any future action that does will require its own explicit approval step before it touches Git state.
 
-**Key bindings** (Vim + Emacs + arrows):
-
-| Action | Keys |
-|---|---|
-| Move down | `↓`, `j`, `Ctrl-N` |
-| Move up | `↑`, `k`, `Ctrl-P` |
-| Page down / up | `Ctrl-D` / `Ctrl-U` |
-| Jump to top / bottom | `g` / `G` |
-| Filter/search | `/` then type; `Esc` clears |
-| Mark/unmark worktree | `m` |
-| Confirm selection | `Enter` |
-| Cancel | `Esc`, `Ctrl-C`, `q` |
-| Help overlay | `?` |
+Picker controls and their user-visible behavior are documented in the
+[README usage section](README.md#usage).
 
 Selecting a plain branch with no worktree and confirming prompts one extra line:
 ```
