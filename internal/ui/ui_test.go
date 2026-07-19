@@ -187,7 +187,7 @@ func TestCancelKeysQuitWithCancelled(t *testing.T) {
 
 func TestMarkTogglesWorktreeItem(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('m'))
+	m = send(t, m, key('j'), key('c'))
 	if m.quitting {
 		t.Fatal("marking an item should not quit the program")
 	}
@@ -196,7 +196,7 @@ func TestMarkTogglesWorktreeItem(t *testing.T) {
 		t.Fatalf("Marked() = %+v, want [feature/login]", marked)
 	}
 
-	m = send(t, m, key('m'))
+	m = send(t, m, key('c'))
 	if len(m.Marked()) != 0 {
 		t.Fatalf("Marked() after second toggle = %+v, want empty", m.Marked())
 	}
@@ -204,7 +204,7 @@ func TestMarkTogglesWorktreeItem(t *testing.T) {
 
 func TestMarkIgnoredOnItemWithoutWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('j'), key('m')) // -> bugfix/api-timeout, no worktree
+	m = send(t, m, key('j'), key('j'), key('c')) // -> bugfix/api-timeout, no worktree
 	if len(m.Marked()) != 0 {
 		t.Fatalf("Marked() = %+v, want empty for item without a worktree", m.Marked())
 	}
@@ -212,7 +212,7 @@ func TestMarkIgnoredOnItemWithoutWorktree(t *testing.T) {
 
 func TestMarkIgnoredOnCurrentWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('m'))
+	m = send(t, m, key('c'))
 	if len(m.Marked()) != 0 {
 		t.Fatalf("Marked() = %+v, want empty for current worktree", m.Marked())
 	}
@@ -220,7 +220,7 @@ func TestMarkIgnoredOnCurrentWorktree(t *testing.T) {
 
 func TestMarkIgnoredOnLockedWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('G'), key('m'))
+	m = send(t, m, key('G'), key('c'))
 	if len(m.Marked()) != 0 {
 		t.Fatalf("Marked() = %+v, want empty for locked worktree", m.Marked())
 	}
@@ -230,7 +230,7 @@ func TestMarkedItemsPersistAcrossCursorMovement(t *testing.T) {
 	items := testItems()
 	items[3].Locked = false
 	m := New(items, "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('m'), key('j'), key('j'), key('m')) // mark feature/login, mark release/2.1
+	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c')) // mark feature/login, mark release/2.1
 	marked := m.Marked()
 	if len(marked) != 2 || marked[0].Branch != "feature/login" || marked[1].Branch != "release/2.1" {
 		t.Fatalf("Marked() = %+v, want [feature/login, release/2.1]", marked)
@@ -241,12 +241,12 @@ func TestMarkedItemsPersistAcrossFiltering(t *testing.T) {
 	items := testItems()
 	items[3].Locked = false
 	m := New(items, "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('m')) // mark feature/login
+	m = send(t, m, key('j'), key('c')) // mark feature/login
 	m = send(t, m, key('/'), key('r'), key('e'), key('l'), keyType(tea.KeyEnter))
 	if len(m.filtered) != 1 || m.items[m.filtered[0]].Branch != "release/2.1" {
 		t.Fatalf("filtered items = %v, want release/2.1", m.filtered)
 	}
-	m = send(t, m, key('m')) // mark release/2.1 while main is filtered out
+	m = send(t, m, key('c')) // mark release/2.1 while main is filtered out
 	m = send(t, m, key('/'), keyType(tea.KeyEsc))
 	marked := m.Marked()
 	if len(marked) != 2 || marked[0].Branch != "feature/login" || marked[1].Branch != "release/2.1" {
@@ -261,7 +261,7 @@ func TestViewShowsMarkColumnOnlyWhileItemsAreMarked(t *testing.T) {
 		t.Fatalf("View() shows mark column before an item is marked:\n%s", view)
 	}
 
-	m = send(t, m, key('j'), key('m'))
+	m = send(t, m, key('j'), key('c'))
 	view = m.View()
 	if !strings.Contains(view, "[x] ○ feature/login") {
 		t.Fatalf("View() missing marker for feature/login:\n%s", view)
@@ -274,7 +274,7 @@ func TestViewShowsMarkColumnOnlyWhileItemsAreMarked(t *testing.T) {
 		t.Fatalf("View() should render no marker for item without a worktree:\n%s", line)
 	}
 
-	m = send(t, m, key('k'), key('m'))
+	m = send(t, m, key('k'), key('c'))
 	view = m.View()
 	if strings.Contains(view, "[ ]") || strings.Contains(view, "[x]") {
 		t.Fatalf("View() shows mark column after the final mark is removed:\n%s", view)
@@ -302,7 +302,7 @@ func TestDKeyIgnoredWithoutMarkedItems(t *testing.T) {
 
 func TestDKeyOpensConfirmWhenItemsMarked(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('m'), key('D'))
+	m = send(t, m, key('j'), key('c'), key('D'))
 	if m.mode != modeConfirmDelete {
 		t.Fatalf("mode after D with a marked item = %v, want modeConfirmDelete", m.mode)
 	}
@@ -312,7 +312,7 @@ func TestConfirmDeleteEnterQuitsWithMarkedItems(t *testing.T) {
 	items := testItems()
 	items[3].Locked = false
 	m := New(items, "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('m'), key('j'), key('j'), key('m'), key('D'), keyType(tea.KeyEnter))
+	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c'), key('D'), keyType(tea.KeyEnter))
 	if !m.quitting {
 		t.Fatal("Enter in modeConfirmDelete should quit the program")
 	}
@@ -325,7 +325,7 @@ func TestConfirmDeleteEnterQuitsWithMarkedItems(t *testing.T) {
 func TestConfirmDeleteCancelReturnsToListWithoutQuitting(t *testing.T) {
 	for _, k := range []tea.KeyMsg{keyType(tea.KeyEsc), keyType(tea.KeyCtrlC), key('q')} {
 		m := New(testItems(), "/repo/proj", "", true)
-		m = send(t, m, key('j'), key('m'), key('D'), k)
+		m = send(t, m, key('j'), key('c'), key('D'), k)
 		if m.mode != modeList {
 			t.Fatalf("mode after %v in modeConfirmDelete = %v, want modeList", k, m.mode)
 		}
@@ -344,7 +344,7 @@ func TestViewShowsDeleteHintOnlyWhenMarked(t *testing.T) {
 		t.Fatalf("View() with nothing marked should not show a delete hint:\n%s", m.View())
 	}
 
-	m = send(t, m, key('j'), key('m'))
+	m = send(t, m, key('j'), key('c'))
 	view := m.View()
 	if !strings.Contains(view, "1 marked") || !strings.Contains(view, "[D] delete") {
 		t.Fatalf("View() with a marked item missing delete hint:\n%s", view)
@@ -355,7 +355,7 @@ func TestConfirmDeleteViewListsMarkedBranches(t *testing.T) {
 	items := testItems()
 	items[3].Locked = false
 	m := New(items, "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('m'), key('j'), key('j'), key('m'), key('D'))
+	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c'), key('D'))
 	view := m.View()
 	if !strings.Contains(view, "Delete 2 worktree(s)") {
 		t.Fatalf("confirm view missing count:\n%s", view)
@@ -384,7 +384,7 @@ func TestHelpOverlayDocumentsMarkBindingAndSemantics(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
 	view := m.View()
-	if !strings.Contains(view, "mark       : m  (worktrees only)") {
+	if !strings.Contains(view, "mark       : c  (worktrees only; selection)") {
 		t.Fatalf("help overlay missing mark binding:\n%s", view)
 	}
 	if !strings.Contains(view, "delete     : D  (marked worktrees, asks to confirm)") {
