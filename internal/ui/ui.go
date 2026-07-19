@@ -44,6 +44,7 @@ type Model struct {
 	noColor       bool
 	defaultAction string
 	keymap        string
+	height        int
 
 	result   Result
 	quitting bool
@@ -80,6 +81,10 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.height = size.Height
+		return m, nil
+	}
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return m, nil
@@ -362,7 +367,9 @@ func (m Model) View() string {
 		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, ? for help)\n", m.navigationHint())
 	}
 
-	for i, idx := range m.filtered {
+	start, end := m.visibleRange()
+	for i := start; i < end; i++ {
+		idx := m.filtered[i]
 		item := m.items[idx]
 		cursor := " "
 		if i == m.cursor {
@@ -379,6 +386,8 @@ func (m Model) View() string {
 				tag = "[worktree, locked]"
 			}
 			line += fmt.Sprintf(" %-20s %s", tag, item.Path)
+		} else if m.noColor {
+			line += " (no worktree)"
 		} else {
 			line += dimStyle.Render(" (no worktree)")
 		}
@@ -392,6 +401,25 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func (m Model) visibleRange() (int, int) {
+	end := len(m.filtered)
+	if m.height == 0 || end <= m.height-1 {
+		return 0, end
+	}
+	if m.height == 1 {
+		return 0, 0
+	}
+	rows := m.height - 1
+	start := m.cursor - rows + 1
+	if start < 0 {
+		start = 0
+	}
+	if start+rows > end {
+		start = end - rows
+	}
+	return start, start + rows
 }
 
 func (m Model) helpView() string {
