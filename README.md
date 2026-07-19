@@ -49,9 +49,9 @@ wt
 ```
 Select branch or worktree (/ to filter, ? for help)
 > ● main                     (current)         ~/proj
-  ○ feature/login            [worktree]        ~/proj-login
+  ○ feature/login            [worktree]
   ○ bugfix/api-timeout                          (no worktree)
-  ○ release/2.1              [worktree, locked] ~/proj-release
+  ○ release/2.1              [worktree, locked]
 ```
 
 Navigate with the arrow keys, `j`/`k`, or `Ctrl-N`/`Ctrl-P`. Jump to the top or bottom with `g`/`G`, page with `Ctrl-D`/`Ctrl-U`, and filter the list by typing `/` followed by a search term. Press `Enter` to confirm, or `Esc`/`Ctrl-C`/`q` to cancel.
