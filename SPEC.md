@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It never mutates Git state on its own; every write (checkout, `worktree add`) happens only after explicit user confirmation, and only via standard `git` invocations.
+`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more worktrees (and their branches) in bulk, via a mark-then-confirm flow. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`, `branch -d`) happens only after explicit user confirmation, and only via standard `git` invocations.
 
 ## 2. Technology Choice
 
@@ -50,13 +50,14 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 │  - plain branch  → git switch <branch>       (in cwd repo)
 │  - worktree path → emit cd path to wrapper   (no git mutation)
 │  - existing path → return it to the shell wrapper
+│  - marked set    → git worktree remove + git branch -d, per item
 └──────────────────────┘
 ```
 
 **Data flow:**
 1. `gitdata` runs `git branch --list --format='%(refname:short)'` and `git worktree list --porcelain -z`, parses both, and produces a single normalized list of items, cross-referencing which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
 2. `ui` renders the list, handles keystrokes purely as state transitions (no side effects) until the user confirms.
-3. `action` executes exactly one of: `git switch`, `git worktree add`, or (for worktrees) a directory change — nothing else touches repository state.
+3. `action` executes exactly one of: `git switch`, `git worktree add`, a directory change (for worktrees), or — after the mark-then-`D`-then-confirm flow — `git worktree remove` and `git branch -d` for each marked item.
 
 **Directory-change trick:** a subprocess cannot change its parent shell's `cwd`. `wt` handles this the same way `zoxide`/`fzf`-based `cd` wrappers do — see §5.
 
@@ -76,7 +77,7 @@ Select branch or worktree (/ to filter, ? for help)
 
 - `●` marks the branch/worktree matching the shell's current directory.
 - `[worktree]` tags branches with a dedicated worktree; untagged branches are plain local branches with no worktree.
-- `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks or removes worktrees.
+- `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks a worktree, and never removes one without the explicit mark-then-confirm deletion flow below.
 - The directory path is shown only for the currently highlighted item; moving the cursor reveals that item's path and hides the previous one.
 
 Picker controls and their user-visible behavior are documented in the

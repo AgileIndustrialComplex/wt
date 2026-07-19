@@ -58,7 +58,9 @@ Select branch or worktree (/ to filter, ? for help)
 
 Navigate with the arrow keys, `j`/`k`, or `Ctrl-N`/`Ctrl-P`. Jump to the top or bottom with `g`/`G`, page with `Ctrl-D`/`Ctrl-U`, and filter the list by typing `/` followed by a search term. Press `Enter` to confirm, or `Esc`/`Ctrl-C`/`q` to cancel.
 
-Highlight a worktree and press `m` to mark or unmark it. After the first mark, a `[x]`/`[ ]` marker column appears and remains visible until the last mark is removed. Marked state persists as you move the cursor or filter, while branches with no worktree cannot be marked. This is currently just a persistent UI marker — no action reads it yet.
+Highlight a worktree and press `m` to mark or unmark it. After the first mark, a `[x]`/`[ ]` marker column appears and remains visible until the last mark is removed. Marked state persists as you move the cursor or filter, while branches with no worktree cannot be marked.
+
+Once at least one item is marked, a hint line appears below the list telling you which key acts on the marked set. Press `D` to delete every marked worktree: a confirmation screen lists the branches and paths about to be removed, `Enter` runs the deletion (`git worktree remove` then `git branch -d` for each), and any cancel key (`Esc`, `Ctrl-C`, `q`) backs out without touching Git state or losing your marked selection.
 
 The picker uses color to distinguish the selected row, current worktree, marked items, worktree tags, locked worktrees, and filter prompt. Pass `--no-color` to disable all ANSI styling.
 
@@ -90,7 +92,7 @@ keymap = "vim"              # vim | emacs | arrows-only
 
 `wt` is written in Go and compiles to a single static binary, so there is no interpreter or runtime to install alongside it. The interactive list is built with the `bubbletea` terminal UI framework, which handles raw terminal mode, key events, and resizing consistently across Linux, macOS, and Windows.
 
-`wt` never reimplements Git logic. It shells out to the real `git` binary for every read (`git branch`, `git worktree list --porcelain`) and every write (`git switch`, `git worktree add`), so behavior always matches what you would get running those commands yourself, including your existing hooks and credential helpers. A small collector step parses both outputs and merges them into one list, tagging each branch with whether it already has a worktree and whether that worktree is locked. That merged view is what makes the "already checked out elsewhere" case visible instead of being an error you hit after the fact.
+`wt` never reimplements Git logic. It shells out to the real `git` binary for every read (`git branch`, `git worktree list --porcelain`) and every write (`git switch`, `git worktree add`, `git worktree remove`, `git branch -d`), so behavior always matches what you would get running those commands yourself, including your existing hooks and credential helpers. A small collector step parses both outputs and merges them into one list, tagging each branch with whether it already has a worktree and whether that worktree is locked. That merged view is what makes the "already checked out elsewhere" case visible instead of being an error you hit after the fact.
 
 Because a subprocess cannot change its parent shell's working directory, `wt` prints the destination path and relies on a thin shell function, installed once via `wt init <shell>`, to perform the actual `cd`. This keeps your working directory untouched unless a switch actually happens.
 

@@ -272,6 +272,78 @@ func lineContaining(view, substr string) string {
 	return ""
 }
 
+func TestDKeyIgnoredWithoutMarkedItems(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('D'))
+	if m.mode != modeList {
+		t.Fatalf("mode after D with nothing marked = %v, want modeList", m.mode)
+	}
+}
+
+func TestDKeyOpensConfirmWhenItemsMarked(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('m'), key('D')) // mark main, then D
+	if m.mode != modeConfirmDelete {
+		t.Fatalf("mode after D with a marked item = %v, want modeConfirmDelete", m.mode)
+	}
+}
+
+func TestConfirmDeleteEnterQuitsWithMarkedItems(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('m'), key('j'), key('j'), key('j'), key('m'), key('D'), keyType(tea.KeyEnter)) // mark main, release/2.1
+	if !m.quitting {
+		t.Fatal("Enter in modeConfirmDelete should quit the program")
+	}
+	res := m.Result()
+	if len(res.Delete) != 2 || res.Delete[0].Branch != "main" || res.Delete[1].Branch != "release/2.1" {
+		t.Fatalf("Result().Delete = %+v, want [main, release/2.1]", res.Delete)
+	}
+}
+
+func TestConfirmDeleteCancelReturnsToListWithoutQuitting(t *testing.T) {
+	for _, k := range []tea.KeyMsg{keyType(tea.KeyEsc), keyType(tea.KeyCtrlC), key('q')} {
+		m := New(testItems(), "/repo/proj", "", true)
+		m = send(t, m, key('m'), key('D'), k)
+		if m.mode != modeList {
+			t.Fatalf("mode after %v in modeConfirmDelete = %v, want modeList", k, m.mode)
+		}
+		if m.quitting {
+			t.Fatalf("%v in modeConfirmDelete should not quit the program", k)
+		}
+		if len(m.Marked()) != 1 {
+			t.Fatalf("Marked() after cancelling delete = %+v, want [main] (cancel should not clear marks)", m.Marked())
+		}
+	}
+}
+
+func TestViewShowsDeleteHintOnlyWhenMarked(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	if strings.Contains(m.View(), "delete") {
+		t.Fatalf("View() with nothing marked should not show a delete hint:\n%s", m.View())
+	}
+
+	m = send(t, m, key('m'))
+	view := m.View()
+	if !strings.Contains(view, "1 marked") || !strings.Contains(view, "[D] delete") {
+		t.Fatalf("View() with a marked item missing delete hint:\n%s", view)
+	}
+}
+
+func TestConfirmDeleteViewListsMarkedBranches(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('m'), key('j'), key('j'), key('j'), key('m'), key('D'))
+	view := m.View()
+	if !strings.Contains(view, "Delete 2 worktree(s)") {
+		t.Fatalf("confirm view missing count:\n%s", view)
+	}
+	if !strings.Contains(view, "main") || !strings.Contains(view, "release/2.1") {
+		t.Fatalf("confirm view missing marked branch names:\n%s", view)
+	}
+	if !strings.Contains(view, "[Enter] confirm") || !strings.Contains(view, "[Esc] cancel") {
+		t.Fatalf("confirm view missing key hints:\n%s", view)
+	}
+}
+
 func TestHelpOverlayReturnsToList(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
@@ -287,8 +359,12 @@ func TestHelpOverlayReturnsToList(t *testing.T) {
 func TestHelpOverlayDocumentsMarkBindingAndSemantics(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
-	if view := m.View(); !strings.Contains(view, "mark       : m  (worktrees only; persistent marker, no action yet)") {
-		t.Fatalf("help overlay missing mark semantics:\n%s", view)
+	view := m.View()
+	if !strings.Contains(view, "mark       : m  (worktrees only)") {
+		t.Fatalf("help overlay missing mark binding:\n%s", view)
+	}
+	if !strings.Contains(view, "delete     : D  (marked worktrees, asks to confirm)") {
+		t.Fatalf("help overlay missing delete semantics:\n%s", view)
 	}
 }
 

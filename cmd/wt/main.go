@@ -80,6 +80,10 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 		return nil
 	}
 
+	if len(result.Delete) > 0 {
+		return applyDelete(result.Delete)
+	}
+
 	dest, err := applyResult(result)
 	if err != nil {
 		return err
@@ -92,6 +96,19 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 	if dest != "" {
 		fmt.Fprintf(os.Stderr, "wt: run 'cd %s', or use shell integration (see `wt init`) to change directory automatically.\n", dest)
 	}
+	return nil
+}
+
+// applyDelete removes each marked worktree and its branch, reporting
+// success to stderr on completion. It returns any error(s) action.
+// DeleteWorktrees encountered so main exits non-zero, but every item is
+// still attempted regardless of earlier failures.
+func applyDelete(items []gitdata.Item) error {
+	err := action.DeleteWorktrees(items)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "wt: deleted %d worktree(s)\n", len(items))
 	return nil
 }
 
