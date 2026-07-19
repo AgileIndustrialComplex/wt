@@ -4,11 +4,13 @@ package ui
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/AgileIndustrialComplex/wt/internal/config"
 	"github.com/AgileIndustrialComplex/wt/internal/gitdata"
@@ -332,9 +334,24 @@ func isUp(msg tea.KeyMsg) bool {
 	return msg.String() == "k"
 }
 
+// colorRenderer always emits ANSI codes: the noColor field on Model is the
+// one place that decides whether styling is applied, so styles must not
+// additionally depend on termenv's own TTY auto-detection, which would
+// otherwise silently drop colors whenever stderr isn't a terminal (e.g. in
+// tests, or when the caller pipes output).
+var colorRenderer = func() *lipgloss.Renderer {
+	r := lipgloss.NewRenderer(io.Discard)
+	r.SetColorProfile(termenv.ANSI)
+	return r
+}()
+
 var (
-	selectedStyle = lipgloss.NewStyle().Bold(true)
-	dimStyle      = lipgloss.NewStyle().Faint(true)
+	selectedStyle = colorRenderer.NewStyle().Bold(true).Foreground(lipgloss.Color("6")) // cyan
+	dimStyle      = colorRenderer.NewStyle().Faint(true)
+	currentStyle  = colorRenderer.NewStyle().Foreground(lipgloss.Color("2")).Bold(true) // green
+	worktreeStyle = colorRenderer.NewStyle().Foreground(lipgloss.Color("4"))            // blue
+	lockedStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("3"))            // yellow
+	filterStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("6")).Bold(true) // cyan
 )
 
 func (m Model) View() string {
@@ -362,7 +379,11 @@ func (m Model) View() string {
 	}
 
 	if m.mode == modeFilter {
-		fmt.Fprintf(&b, "Filter> %s\n", m.filter)
+		prompt := "Filter> "
+		if !m.noColor {
+			prompt = filterStyle.Render(prompt)
+		}
+		fmt.Fprintf(&b, "%s%s\n", prompt, m.filter)
 	} else {
 		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, ? for help)\n", m.navigationHint())
 	}
@@ -378,17 +399,30 @@ func (m Model) View() string {
 		mark := "○"
 		if item.IsCurrent {
 			mark = "●"
+			if !m.noColor {
+				mark = currentStyle.Render(mark)
+			}
 		}
 		line := fmt.Sprintf("%s %s %-28s", cursor, mark, item.Branch)
 		if item.HasWorktree() {
 			tag := "[worktree]"
+			style := worktreeStyle
 			if item.Locked {
 				tag = "[worktree, locked]"
+				style = lockedStyle
 			}
 			if i == m.cursor {
-				line += fmt.Sprintf(" %-20s %s", tag, item.Path)
+				tagField := fmt.Sprintf("%-20s", tag)
+				if !m.noColor {
+					tagField = style.Render(tagField)
+				}
+				line += fmt.Sprintf(" %s %s", tagField, item.Path)
 			} else {
-				line += fmt.Sprintf(" %s", tag)
+				tagField := tag
+				if !m.noColor {
+					tagField = style.Render(tagField)
+				}
+				line += fmt.Sprintf(" %s", tagField)
 			}
 		} else if m.noColor {
 			line += " (no worktree)"
@@ -396,7 +430,11 @@ func (m Model) View() string {
 			line += dimStyle.Render(" (no worktree)")
 		}
 		if item.IsCurrent {
-			line += " (current)"
+			suffix := " (current)"
+			if !m.noColor {
+				suffix = currentStyle.Render(suffix)
+			}
+			line += suffix
 		}
 		if !m.noColor && i == m.cursor {
 			line = selectedStyle.Render(line)

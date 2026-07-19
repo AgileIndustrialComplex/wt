@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -238,5 +239,22 @@ func TestNoColorViewContainsNoANSISequences(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	if view := m.View(); strings.Contains(view, "\x1b[") {
 		t.Fatalf("no-color View() contains ANSI sequence: %q", view)
+	}
+}
+
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func TestColorViewMatchesNoColorContentWithEscapesStripped(t *testing.T) {
+	colorView := ansiEscape.ReplaceAllString(New(testItems(), "/repo/proj", "", false).View(), "")
+	plainView := New(testItems(), "/repo/proj", "", true).View()
+	if colorView != plainView {
+		t.Fatalf("color view with escapes stripped = %q, want %q", colorView, plainView)
+	}
+}
+
+func TestColorViewContainsANSISequences(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", false)
+	if view := m.View(); !strings.Contains(view, "\x1b[") {
+		t.Fatalf("color View() contains no ANSI sequence: %q", view)
 	}
 }
