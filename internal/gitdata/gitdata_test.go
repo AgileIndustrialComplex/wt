@@ -26,7 +26,7 @@ func TestParseWorktreePorcelain(t *testing.T) {
 		"HEAD jkl012",
 		"detached",
 		"",
-	}, "\n")
+	}, "\x00")
 
 	got := parseWorktreePorcelain(out)
 	want := []worktreeInfo{
@@ -41,7 +41,7 @@ func TestParseWorktreePorcelain(t *testing.T) {
 }
 
 func TestParseWorktreePorcelainNoTrailingBlank(t *testing.T) {
-	out := "worktree /repo/proj\nHEAD abc123\nbranch refs/heads/main"
+	out := "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/main"
 	got := parseWorktreePorcelain(out)
 	want := []worktreeInfo{{path: "/repo/proj", branch: "main"}}
 	if !reflect.DeepEqual(got, want) {
@@ -88,7 +88,7 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 			"HEAD jkl012",
 			"detached",
 			"",
-		}, "\n"),
+		}, "\x00"),
 		"branch":    "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
 		"rev-parse": "/repo/proj\n",
 	}
@@ -112,7 +112,7 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 
 func TestCollectMovesCurrentItemFirst(t *testing.T) {
 	fr := fakeRunner{
-		"worktree":  "worktree /repo/proj\nHEAD abc123\nbranch refs/heads/z-current\n",
+		"worktree":  "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/z-current\x00",
 		"branch":    "a-first\nz-current\n",
 		"rev-parse": "/repo/proj\n",
 	}
@@ -122,6 +122,15 @@ func TestCollectMovesCurrentItemFirst(t *testing.T) {
 	}
 	if items[0].Branch != "z-current" || !items[0].IsCurrent {
 		t.Fatalf("first item = %+v, want current branch", items[0])
+	}
+}
+
+func TestParseWorktreePorcelainPreservesSpecialPath(t *testing.T) {
+	out := "worktree /repo/café folder\\name\x00HEAD abc123\x00detached\x00\x00"
+	got := parseWorktreePorcelain(out)
+	want := []worktreeInfo{{path: "/repo/café folder\\name", detached: true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseWorktreePorcelain() = %#v, want %#v", got, want)
 	}
 }
 
