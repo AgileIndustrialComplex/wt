@@ -130,27 +130,27 @@ func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case msg.Type == tea.KeyEsc:
+	switch msg.Type {
+	case tea.KeyEsc:
 		m.filter = ""
 		m.mode = modeList
 		m.applyFilter()
 		return m, nil
-	case msg.Type == tea.KeyEnter:
+	case tea.KeyEnter:
 		m.mode = modeList
 		return m, nil
-	case msg.Type == tea.KeyBackspace:
+	case tea.KeyBackspace:
 		if len(m.filter) > 0 {
 			r := []rune(m.filter)
 			m.filter = string(r[:len(r)-1])
 			m.applyFilter()
 		}
 		return m, nil
-	case msg.Type == tea.KeyCtrlC:
+	case tea.KeyCtrlC:
 		m.result = Result{Cancelled: true}
 		m.quitting = true
 		return m, tea.Quit
-	case msg.Type == tea.KeyRunes:
+	case tea.KeyRunes:
 		m.filter += string(msg.Runes)
 		m.applyFilter()
 		return m, nil
