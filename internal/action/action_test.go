@@ -1,0 +1,73 @@
+package action
+
+import (
+	"fmt"
+	"reflect"
+	"testing"
+
+	"github.com/AgileIndustrialComplex/wt/internal/gitdata"
+)
+
+func recordingRunner() (runnerFunc, *[][]string) {
+	var calls [][]string
+	return func(args ...string) error {
+		calls = append(calls, append([]string{}, args...))
+		return nil
+	}, &calls
+}
+
+func TestSwitchWithExistingWorktreeReturnsPathAndRunsNoGit(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "feature/login", Path: "/repo/proj-login"}
+
+	path, err := switchWith(run, item)
+	if err != nil {
+		t.Fatalf("switchWith() error = %v", err)
+	}
+	if path != "/repo/proj-login" {
+		t.Fatalf("path = %q, want worktree path", path)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("git calls = %v, want none (no mutation for existing worktree)", *calls)
+	}
+}
+
+func TestSwitchWithNoWorktreeRunsGitSwitch(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "bugfix/api-timeout"}
+
+	path, err := switchWith(run, item)
+	if err != nil {
+		t.Fatalf("switchWith() error = %v", err)
+	}
+	if path != "" {
+		t.Fatalf("path = %q, want empty (in-place switch)", path)
+	}
+	want := [][]string{{"switch", "bugfix/api-timeout"}}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestSwitchWithPropagatesGitError(t *testing.T) {
+	run := func(args ...string) error { return fmt.Errorf("boom") }
+	_, err := switchWith(run, gitdata.Item{Branch: "main"})
+	if err == nil {
+		t.Fatal("switchWith() error = nil, want error propagated from git")
+	}
+}
+
+func TestNewWorktreeWithRunsGitWorktreeAdd(t *testing.T) {
+	run, calls := recordingRunner()
+	path, err := newWorktreeWith(run, "/repo/proj-login", "feature/login")
+	if err != nil {
+		t.Fatalf("newWorktreeWith() error = %v", err)
+	}
+	if path != "/repo/proj-login" {
+		t.Fatalf("path = %q, want /repo/proj-login", path)
+	}
+	want := [][]string{{"worktree", "add", "/repo/proj-login", "feature/login"}}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
