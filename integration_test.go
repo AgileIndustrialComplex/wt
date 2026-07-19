@@ -86,6 +86,12 @@ func applyResult(t *testing.T, result ui.Result) string {
 	if result.Cancelled {
 		t.Fatal("picker was cancelled, want a selection")
 	}
+	if len(result.Delete) > 0 {
+		if err := action.DeleteWorktrees(result.Delete); err != nil {
+			t.Fatalf("action.DeleteWorktrees: %v", err)
+		}
+		return ""
+	}
 	if result.Item.HasWorktree() {
 		dest, err := action.Switch(result.Item)
 		if err != nil {
@@ -201,6 +207,40 @@ func TestIntegrationCreateWorktreeForBranch(t *testing.T) {
 	want := worktreePathForBranch(t, repo, "alpha")
 	if filepath.Clean(dest) != filepath.Clean(want) {
 		t.Fatalf("dest = %q, want %q (matches git worktree list)", dest, want)
+	}
+}
+
+func TestIntegrationDeleteMarkedWorktree(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	wtDir := filepath.Join(t.TempDir(), "zeta-wt-checkout")
+	runGit(t, repo, "worktree", "add", "-b", "zeta-wt", wtDir)
+	chdir(t, repo)
+
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	// order: main (cursor 0), zeta-wt (cursor 1) -> down, mark, D, Enter.
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keyDown, keyRune('m'), keyRune('D'), keyEnter)
+
+	if len(result.Delete) != 1 || result.Delete[0].Branch != "zeta-wt" {
+		t.Fatalf("result.Delete = %+v, want [zeta-wt]", result.Delete)
+	}
+	applyResult(t, result)
+
+	if _, err := os.Stat(wtDir); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir %q still exists after delete", wtDir)
+	}
+	branches := runGit(t, repo, "branch", "--list", "zeta-wt")
+	if strings.TrimSpace(branches) != "" {
+		t.Fatalf("branch zeta-wt still exists after delete: %q", branches)
 	}
 }
 

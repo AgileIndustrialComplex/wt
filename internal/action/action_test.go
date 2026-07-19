@@ -3,6 +3,7 @@ package action
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/AgileIndustrialComplex/wt/internal/gitdata"
@@ -54,6 +55,64 @@ func TestSwitchWithPropagatesGitError(t *testing.T) {
 	_, err := switchWith(run, gitdata.Item{Branch: "main"})
 	if err == nil {
 		t.Fatal("switchWith() error = nil, want error propagated from git")
+	}
+}
+
+func TestDeleteWorktreesWithRemovesWorktreeThenDeletesBranch(t *testing.T) {
+	run, calls := recordingRunner()
+	items := []gitdata.Item{
+		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "release/2.1", Path: "/repo/proj-release"},
+	}
+
+	if err := deleteWorktreesWith(run, items); err != nil {
+		t.Fatalf("deleteWorktreesWith() error = %v", err)
+	}
+	want := [][]string{
+		{"worktree", "remove", "/repo/proj-login"},
+		{"branch", "-d", "feature/login"},
+		{"worktree", "remove", "/repo/proj-release"},
+		{"branch", "-d", "release/2.1"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestDeleteWorktreesWithSkipsBranchDeleteOnWorktreeRemoveFailure(t *testing.T) {
+	run := func(args ...string) error {
+		if args[0] == "worktree" {
+			return fmt.Errorf("worktree remove failed")
+		}
+		t.Fatalf("unexpected git call: %v", args)
+		return nil
+	}
+	item := gitdata.Item{Branch: "feature/login", Path: "/repo/proj-login"}
+
+	err := deleteWorktreesWith(run, []gitdata.Item{item})
+	if err == nil {
+		t.Fatal("deleteWorktreesWith() error = nil, want error propagated from worktree remove")
+	}
+}
+
+func TestDeleteWorktreesWithContinuesAfterFailureAndCombinesErrors(t *testing.T) {
+	run := func(args ...string) error {
+		if args[0] == "worktree" && args[2] == "/repo/proj-login" {
+			return fmt.Errorf("boom")
+		}
+		return nil
+	}
+	items := []gitdata.Item{
+		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "release/2.1", Path: "/repo/proj-release"},
+	}
+
+	err := deleteWorktreesWith(run, items)
+	if err == nil {
+		t.Fatal("deleteWorktreesWith() error = nil, want combined error from the failing item")
+	}
+	if !strings.Contains(err.Error(), "feature/login") {
+		t.Fatalf("error = %v, want it to mention feature/login", err)
 	}
 }
 

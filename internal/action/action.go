@@ -4,6 +4,8 @@
 package action
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -50,4 +52,27 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// DeleteWorktrees removes each item's worktree via `git worktree remove`,
+// then deletes the now-unattached branch via `git branch -d` (non-force: a
+// branch with unmerged commits is left in place and reported as an error).
+// Every item is attempted even if earlier ones fail; all failures are
+// combined into a single returned error.
+func DeleteWorktrees(items []gitdata.Item) error {
+	return deleteWorktreesWith(runGit, items)
+}
+
+func deleteWorktreesWith(run runnerFunc, items []gitdata.Item) error {
+	var errs []error
+	for _, item := range items {
+		if err := run("worktree", "remove", item.Path); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
+			continue
+		}
+		if err := run("branch", "-d", item.Branch); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
+		}
+	}
+	return errors.Join(errs...)
 }

@@ -24,14 +24,16 @@ const (
 	modeResolve
 	modeLocked
 	modeHelp
+	modeConfirmDelete
 )
 
 // Result is what the picker produced when the program exited.
 type Result struct {
 	Cancelled       bool
 	Item            gitdata.Item
-	Resolution      string // config.ActionSwitch or config.ActionWorktree, set only when Item has no worktree
-	NewWorktreePath string // suggested path, set only when Resolution == config.ActionWorktree
+	Resolution      string         // config.ActionSwitch or config.ActionWorktree, set only when Item has no worktree
+	NewWorktreePath string         // suggested path, set only when Resolution == config.ActionWorktree
+	Delete          []gitdata.Item // set when the user confirmed bulk deletion of the marked worktrees
 }
 
 // Model is the bubbletea model for the picker.
@@ -103,9 +105,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateResolve(keyMsg)
 	case modeLocked:
 		return m.updateLocked(keyMsg)
+	case modeConfirmDelete:
+		return m.updateConfirmDelete(keyMsg)
 	default:
 		return m.updateList(keyMsg)
 	}
+}
+
+// updateConfirmDelete handles the approval step shown after pressing D with
+// at least one worktree marked. Enter confirms and quits with the marked
+// items in Result.Delete; any cancel key stops the operation and returns to
+// the list without quitting the picker.
+func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if isCancel(msg) {
+		m.mode = modeList
+		return m, nil
+	}
+	if msg.Type == tea.KeyEnter {
+		m.result = Result{Delete: m.Marked()}
+		m.quitting = true
+		return m, tea.Quit
+	}
+	return m, nil
 }
 
 func (m Model) updateLocked(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -236,6 +257,12 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case msg.String() == "m":
 		m.toggleMarked()
+		return m, nil
+
+	case msg.String() == "D":
+		if len(m.marked) > 0 {
+			m.mode = modeConfirmDelete
+		}
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
@@ -421,6 +448,14 @@ func (m Model) View() string {
 			fmt.Fprintf(&b, "Worktree at %s is locked. [Enter] continue  [Esc] cancel\n", item.Path)
 		}
 		return b.String()
+	case modeConfirmDelete:
+		marked := m.Marked()
+		fmt.Fprintf(&b, "Delete %d worktree(s) and their branches?\n", len(marked))
+		for _, item := range marked {
+			fmt.Fprintf(&b, "  %s  %s\n", item.Branch, item.Path)
+		}
+		b.WriteString("[Enter] confirm  [Esc] cancel\n")
+		return b.String()
 	}
 
 	if m.mode == modeFilter {
@@ -500,6 +535,13 @@ func (m Model) View() string {
 		b.WriteString(line)
 		b.WriteString("\n")
 	}
+	if n := len(m.marked); n > 0 {
+		hint := fmt.Sprintf("%d marked — [D] delete\n", n)
+		if !m.noColor {
+			hint = markedStyle.Render(hint)
+		}
+		b.WriteString(hint)
+	}
 	return b.String()
 }
 
@@ -531,7 +573,8 @@ func (m Model) helpView() string {
 		"  page up    : Ctrl-U",
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
-		"  mark       : m  (worktrees only; persistent marker, no action yet)",
+		"  mark       : m  (worktrees only)",
+		"  delete     : D  (marked worktrees, asks to confirm)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",
