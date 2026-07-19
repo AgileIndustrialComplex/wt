@@ -99,9 +99,7 @@ Instead a second screen appears:
 ```
 The following branch(es) have unmerged changes and will be permanently lost:
   feature/wip-thing
-Type the phrase below exactly and press Enter to proceed, or Esc to cancel:
-
-Yes, I want to remove the branch that has changes that have been unmerged.
+Type "delete" and press Enter to proceed, or Esc to cancel:
 
 > _
 ```
@@ -109,13 +107,11 @@ Yes, I want to remove the branch that has changes that have been unmerged.
 - This screen only appears when at least one marked branch is unmerged;
   marked sets containing only merged branches delete exactly as before,
   with no extra step.
-- The user must type the phrase **"Yes, I want to remove the branch that has
-  changes that have been unmerged."** exactly (case-sensitive, full
-  punctuation) and press `Enter` to proceed; any mismatch is rejected and
-  the input stays open for correction. `Esc` or `Ctrl-C` cancels the whole
-  batch — including any merged branches marked alongside the unmerged
-  one(s) — and returns to the list without touching Git state or losing
-  the marked selection.
+- The user must type **"delete"** exactly (case-sensitive) and press `Enter`
+  to proceed; any mismatch is rejected and the input stays open for
+  correction. `Esc` or `Ctrl-C` cancels the whole batch — including any
+  merged branches marked alongside the unmerged one(s) — and returns to the
+  list without touching Git state or losing the marked selection.
 - Once confirmed, `wt` deletes the batch in one pass: merged branches via
   `git branch -d` as before, unmerged branches via `git branch -D` (force),
   since explicit, phrase-level consent was already obtained.

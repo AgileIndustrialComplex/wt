@@ -29,10 +29,10 @@ const (
 )
 
 // ForceDeleteConfirmPhrase is the exact text a user must type to delete a
-// branch with unmerged changes. It must match verbatim (case-sensitive,
-// including punctuation) — this is deliberate friction against losing
-// unmerged work, so it is never abbreviated or made configurable.
-const ForceDeleteConfirmPhrase = "Yes, I want to remove the branch that has changes that have been unmerged."
+// branch with unmerged changes. It must match verbatim (case-sensitive) —
+// this is deliberate friction against losing unmerged work, so it is never
+// made configurable.
+const ForceDeleteConfirmPhrase = "delete"
 
 // Result is what the picker produced when the program exited.
 type Result struct {
@@ -529,8 +529,7 @@ func (m Model) View() string {
 				fmt.Fprintf(&b, "  %s\n", item.Branch)
 			}
 		}
-		b.WriteString("Type the phrase below exactly and press Enter to proceed, or Esc to cancel:\n\n")
-		fmt.Fprintf(&b, "  %s\n\n", ForceDeleteConfirmPhrase)
+		fmt.Fprintf(&b, "Type %q and press Enter to proceed, or Esc to cancel:\n\n", ForceDeleteConfirmPhrase)
 		fmt.Fprintf(&b, "> %s\n", m.forceConfirmInput)
 		return b.String()
 	}
