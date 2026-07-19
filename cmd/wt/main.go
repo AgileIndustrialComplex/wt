@@ -66,7 +66,7 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 		return err
 	}
 
-	m := ui.New(items, top, worktreeRoot, noColor)
+	m := ui.NewConfigured(items, top, worktreeRoot, noColor, cfg.DefaultAction, cfg.Keymap)
 	// Render to stderr, like fzf, so stdout stays clean for the final path
 	// when a caller (e.g. the shell wrapper) captures it via $(...).
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
