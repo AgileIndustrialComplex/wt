@@ -53,17 +53,17 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 	return path, nil
 }
 
-// RemoveWorktrees removes each item's worktree via `git worktree remove`,
-// stopping at the first failure so the caller can report which path failed.
-func RemoveWorktrees(items []gitdata.Item) error {
+// RemoveWorktrees removes each item's worktree via `git worktree remove` and
+// returns the items removed before the first failure.
+func RemoveWorktrees(items []gitdata.Item) ([]gitdata.Item, error) {
 	return removeWorktreesWith(runGit, items)
 }
 
-func removeWorktreesWith(run runnerFunc, items []gitdata.Item) error {
-	for _, item := range items {
+func removeWorktreesWith(run runnerFunc, items []gitdata.Item) ([]gitdata.Item, error) {
+	for i, item := range items {
 		if err := run("worktree", "remove", item.Path); err != nil {
-			return fmt.Errorf("removing %s: %w", item.Path, err)
+			return items[:i], fmt.Errorf("removing %s: %w", item.Path, err)
 		}
 	}
-	return nil
+	return items, nil
 }

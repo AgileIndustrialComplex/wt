@@ -81,11 +81,12 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 	}
 
 	if len(result.RemoveItems) > 0 {
-		if err := action.RemoveWorktrees(result.RemoveItems); err != nil {
-			return err
-		}
-		for _, item := range result.RemoveItems {
+		removed, err := action.RemoveWorktrees(result.RemoveItems)
+		for _, item := range removed {
 			fmt.Fprintf(os.Stderr, "wt: removed worktree %s\n", item.Path)
+		}
+		if err != nil {
+			return err
 		}
 		return nil
 	}

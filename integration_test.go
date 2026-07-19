@@ -137,7 +137,7 @@ func TestIntegrationRemoveWorktree(t *testing.T) {
 		t.Fatalf("RemoveItems = %+v, want [zeta-wt]", result.RemoveItems)
 	}
 
-	if err := action.RemoveWorktrees(result.RemoveItems); err != nil {
+	if _, err := action.RemoveWorktrees(result.RemoveItems); err != nil {
 		t.Fatalf("action.RemoveWorktrees: %v", err)
 	}
 
