@@ -118,7 +118,9 @@ func collect(run runnerFunc) ([]Item, error) {
 	}
 	for i := range items {
 		if items[i].IsCurrent {
-			items[0], items[i] = items[i], items[0]
+			current := items[i]
+			items = append(items[:i], items[i+1:]...)
+			items = append([]Item{current}, items...)
 			break
 		}
 	}
