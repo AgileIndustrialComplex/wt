@@ -62,7 +62,9 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 
 ## 4. User Interface Design
 
-On launch, the tool renders a single scrollable list, current item first:
+On launch, the tool renders a single scrollable list. The current item is
+first; the remaining branches follow in Git's original order, then detached
+worktrees in their original order:
 
 ```
 Select branch or worktree (/ to filter, ? for help)
