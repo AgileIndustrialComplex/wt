@@ -385,7 +385,11 @@ func (m Model) View() string {
 			if item.Locked {
 				tag = "[worktree, locked]"
 			}
-			line += fmt.Sprintf(" %-20s %s", tag, item.Path)
+			if i == m.cursor {
+				line += fmt.Sprintf(" %-20s %s", tag, item.Path)
+			} else {
+				line += fmt.Sprintf(" %s", tag)
+			}
 		} else if m.noColor {
 			line += " (no worktree)"
 		} else {
