@@ -88,6 +88,41 @@ Selecting a plain branch with no worktree and confirming prompts one extra line:
 ```
 This directly resolves the stated pain point: instead of `git switch` erroring out, the tool offers the two valid resolutions inline.
 
+**Deleting branches with unmerged changes:** `git branch -d` (the non-force
+delete `wt` uses) refuses branches not fully merged, so by default such a
+branch is simply left in place. `wt` detects this ahead of time — each
+`Item` carries an `Unmerged` flag computed from `git branch --merged` during
+collection — and if any branch in the marked set is unmerged, confirming the
+normal delete screen (`D` then `Enter`) does not delete anything yet.
+Instead a second screen appears:
+
+```
+The following branch(es) have unmerged changes and will be permanently lost:
+  feature/wip-thing
+Type the phrase below exactly and press Enter to proceed, or Esc to cancel:
+
+Yes, I want to remove the branch that has changes that have been unmerged.
+
+> _
+```
+
+- This screen only appears when at least one marked branch is unmerged;
+  marked sets containing only merged branches delete exactly as before,
+  with no extra step.
+- The user must type the phrase **"Yes, I want to remove the branch that has
+  changes that have been unmerged."** exactly (case-sensitive, full
+  punctuation) and press `Enter` to proceed; any mismatch is rejected and
+  the input stays open for correction. `Esc` or `Ctrl-C` cancels the whole
+  batch — including any merged branches marked alongside the unmerged
+  one(s) — and returns to the list without touching Git state or losing
+  the marked selection.
+- Once confirmed, `wt` deletes the batch in one pass: merged branches via
+  `git branch -d` as before, unmerged branches via `git branch -D` (force),
+  since explicit, phrase-level consent was already obtained.
+- Detached-HEAD worktree entries (which have no associated branch to
+  delete) are excluded from the unmerged check and never trigger this
+  screen on their own.
+
 ## 5. Implementation Details
 
 **Command-line arguments:**

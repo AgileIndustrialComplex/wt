@@ -76,11 +76,12 @@ func TestParseLines(t *testing.T) {
 	}
 }
 
-// fakeRunner returns canned output per git subcommand, keyed by the first arg.
+// fakeRunner returns canned output per full git invocation, keyed by the
+// space-joined args (e.g. "branch --format=%(refname:short) --merged").
 type fakeRunner map[string]string
 
 func (f fakeRunner) run(args ...string) (string, error) {
-	out, ok := f[args[0]]
+	out, ok := f[strings.Join(args, " ")]
 	if !ok {
 		return "", fmt.Errorf("unexpected git subcommand: %v", args)
 	}
@@ -89,7 +90,7 @@ func (f fakeRunner) run(args ...string) (string, error) {
 
 func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 	fr := fakeRunner{
-		"worktree": strings.Join([]string{
+		"worktree list --porcelain -z": strings.Join([]string{
 			"worktree /repo/proj",
 			"HEAD abc123",
 			"branch refs/heads/main",
@@ -108,8 +109,9 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 			"detached",
 			"",
 		}, "\x00"),
-		"branch":    "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
-		"rev-parse": "/repo/proj\n",
+		"branch --list --format=%(refname:short)":   "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
+		"branch --format=%(refname:short) --merged": "main\nbugfix/api-timeout\n",
+		"rev-parse --show-toplevel":                 "/repo/proj\n",
 	}
 
 	items, err := collect(fr.run)
@@ -119,9 +121,9 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 
 	want := []Item{
 		{Branch: "main", Path: "/repo/proj", IsCurrent: true},
-		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "feature/login", Path: "/repo/proj-login", Unmerged: true},
 		{Branch: "bugfix/api-timeout"},
-		{Branch: "release/2.1", Path: "/repo/proj-release", Locked: true},
+		{Branch: "release/2.1", Path: "/repo/proj-release", Locked: true, Unmerged: true},
 		{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true},
 	}
 	if !reflect.DeepEqual(items, want) {
@@ -131,9 +133,10 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 
 func TestCollectMovesCurrentItemFirst(t *testing.T) {
 	fr := fakeRunner{
-		"worktree":  "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/z-current\x00",
-		"branch":    "a-first\nz-current\n",
-		"rev-parse": "/repo/proj\n",
+		"worktree list --porcelain -z":              "worktree /repo/proj\x00HEAD abc123\x00branch refs/heads/z-current\x00",
+		"branch --list --format=%(refname:short)":   "a-first\nz-current\n",
+		"branch --format=%(refname:short) --merged": "a-first\nz-current\n",
+		"rev-parse --show-toplevel":                 "/repo/proj\n",
 	}
 	items, err := collect(fr.run)
 	if err != nil {
@@ -146,7 +149,7 @@ func TestCollectMovesCurrentItemFirst(t *testing.T) {
 
 func TestCollectMovesCurrentFirstPreservingRemainingOrder(t *testing.T) {
 	fr := fakeRunner{
-		"worktree": strings.Join([]string{
+		"worktree list --porcelain -z": strings.Join([]string{
 			"worktree /repo/proj-current",
 			"HEAD abc123",
 			"branch refs/heads/z-current",
@@ -156,8 +159,9 @@ func TestCollectMovesCurrentFirstPreservingRemainingOrder(t *testing.T) {
 			"detached",
 			"",
 		}, "\x00"),
-		"branch":    "a-first\nb-middle\nz-current\n",
-		"rev-parse": "/repo/proj-current\n",
+		"branch --list --format=%(refname:short)":   "a-first\nb-middle\nz-current\n",
+		"branch --format=%(refname:short) --merged": "a-first\nb-middle\nz-current\n",
+		"rev-parse --show-toplevel":                 "/repo/proj-current\n",
 	}
 
 	items, err := collect(fr.run)
@@ -170,6 +174,28 @@ func TestCollectMovesCurrentFirstPreservingRemainingOrder(t *testing.T) {
 		{Branch: "a-first"},
 		{Branch: "b-middle"},
 		{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true},
+	}
+	if !reflect.DeepEqual(items, want) {
+		t.Fatalf("collect() = %#v, want %#v", items, want)
+	}
+}
+
+func TestCollectMarksUnmergedBranches(t *testing.T) {
+	fr := fakeRunner{
+		"worktree list --porcelain -z":              "",
+		"branch --list --format=%(refname:short)":   "main\nfeature/wip\n",
+		"branch --format=%(refname:short) --merged": "main\n",
+		"rev-parse --show-toplevel":                 "/repo/proj\n",
+	}
+
+	items, err := collect(fr.run)
+	if err != nil {
+		t.Fatalf("collect() error = %v", err)
+	}
+
+	want := []Item{
+		{Branch: "main"},
+		{Branch: "feature/wip", Unmerged: true},
 	}
 	if !reflect.DeepEqual(items, want) {
 		t.Fatalf("collect() = %#v, want %#v", items, want)

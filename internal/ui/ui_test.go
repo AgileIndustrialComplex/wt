@@ -381,6 +381,110 @@ func TestConfirmDeleteViewShowsNoWorktreeForPlainBranch(t *testing.T) {
 	}
 }
 
+func TestConfirmDeleteEnterWithUnmergedItemEntersForceDeleteMode(t *testing.T) {
+	items := testItems()
+	items[1].Unmerged = true // feature/login
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter))
+	if m.mode != modeConfirmForceDelete {
+		t.Fatalf("mode after confirming delete with an unmerged branch = %v, want modeConfirmForceDelete", m.mode)
+	}
+	if m.quitting {
+		t.Fatal("Enter in modeConfirmDelete with an unmerged branch should not quit yet")
+	}
+}
+
+func TestForceDeleteViewListsOnlyUnmergedBranchesFromMixedBatch(t *testing.T) {
+	items := testItems()
+	items[3].Locked = false
+	items[1].Unmerged = true // feature/login unmerged; release/2.1 stays merged
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c'), key('D'), keyType(tea.KeyEnter))
+	view := m.View()
+	if !strings.Contains(view, "feature/login") {
+		t.Fatalf("force-delete view missing unmerged branch:\n%s", view)
+	}
+	if strings.Contains(view, "release/2.1") {
+		t.Fatalf("force-delete view should not list merged branch release/2.1:\n%s", view)
+	}
+	if !strings.Contains(view, ForceDeleteConfirmPhrase) {
+		t.Fatalf("force-delete view missing required phrase:\n%s", view)
+	}
+}
+
+func TestForceDeleteWrongPhraseDoesNotQuit(t *testing.T) {
+	items := testItems()
+	items[1].Unmerged = true
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter), key('y'), key('e'), key('s'), keyType(tea.KeyEnter))
+	if m.mode != modeConfirmForceDelete || m.quitting {
+		t.Fatalf("mismatched phrase should not confirm: mode=%v quitting=%v", m.mode, m.quitting)
+	}
+}
+
+func TestForceDeleteBackspaceEditsInput(t *testing.T) {
+	items := testItems()
+	items[1].Unmerged = true
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter), key('y'), key('e'), key('s'), keyType(tea.KeyBackspace))
+	if m.forceConfirmInput != "ye" {
+		t.Fatalf("forceConfirmInput after backspace = %q, want %q", m.forceConfirmInput, "ye")
+	}
+}
+
+func TestForceDeleteEscCancelsWithoutQuittingAndClearsInput(t *testing.T) {
+	items := testItems()
+	items[1].Unmerged = true
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter), key('y'), keyType(tea.KeyEsc))
+	if m.mode != modeList {
+		t.Fatalf("mode after Esc in modeConfirmForceDelete = %v, want modeList", m.mode)
+	}
+	if m.quitting {
+		t.Fatal("Esc in modeConfirmForceDelete should not quit the program")
+	}
+	if len(m.Marked()) != 1 {
+		t.Fatalf("Marked() after cancelling force-delete = %+v, want [feature/login] (cancel should not clear marks)", m.Marked())
+	}
+	if m.forceConfirmInput != "" {
+		t.Fatalf("forceConfirmInput after cancel = %q, want empty", m.forceConfirmInput)
+	}
+}
+
+func TestForceDeleteExactPhraseQuitsWithMarkedItems(t *testing.T) {
+	items := testItems()
+	items[1].Unmerged = true
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('D'), keyType(tea.KeyEnter))
+	for _, r := range ForceDeleteConfirmPhrase {
+		m = send(t, m, key(r))
+	}
+	m = send(t, m, keyType(tea.KeyEnter))
+	if !m.quitting {
+		t.Fatal("Enter with the exact phrase in modeConfirmForceDelete should quit the program")
+	}
+	res := m.Result()
+	if len(res.Delete) != 1 || res.Delete[0].Branch != "feature/login" {
+		t.Fatalf("Result().Delete = %+v, want [feature/login]", res.Delete)
+	}
+}
+
+func TestForceDeleteConfirmsWholeMixedBatch(t *testing.T) {
+	items := testItems()
+	items[3].Locked = false
+	items[1].Unmerged = true
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c'), key('D'), keyType(tea.KeyEnter))
+	for _, r := range ForceDeleteConfirmPhrase {
+		m = send(t, m, key(r))
+	}
+	m = send(t, m, keyType(tea.KeyEnter))
+	res := m.Result()
+	if len(res.Delete) != 2 {
+		t.Fatalf("Result().Delete = %+v, want 2 items (whole marked batch, merged and unmerged)", res.Delete)
+	}
+}
+
 func TestHelpOverlayReturnsToList(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
@@ -400,7 +504,7 @@ func TestHelpOverlayDocumentsMarkBindingAndSemantics(t *testing.T) {
 	if !strings.Contains(view, "mark       : c  (selection)") {
 		t.Fatalf("help overlay missing mark binding:\n%s", view)
 	}
-	if !strings.Contains(view, "delete     : D  (marked branches, asks to confirm)") {
+	if !strings.Contains(view, "delete     : D  (marked branches, asks to confirm; unmerged branches require typing a phrase)") {
 		t.Fatalf("help overlay missing delete semantics:\n%s", view)
 	}
 }

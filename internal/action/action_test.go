@@ -79,6 +79,27 @@ func TestDeleteWorktreesWithRemovesWorktreeThenDeletesBranch(t *testing.T) {
 	}
 }
 
+func TestDeleteWorktreesWithForcesDeleteOfUnmergedBranch(t *testing.T) {
+	run, calls := recordingRunner()
+	items := []gitdata.Item{
+		{Branch: "feature/wip", Path: "/repo/proj-wip", Unmerged: true},
+		{Branch: "release/2.1", Path: "/repo/proj-release"},
+	}
+
+	if err := deleteWorktreesWith(run, items); err != nil {
+		t.Fatalf("deleteWorktreesWith() error = %v", err)
+	}
+	want := [][]string{
+		{"worktree", "remove", "/repo/proj-wip"},
+		{"branch", "-D", "feature/wip"},
+		{"worktree", "remove", "/repo/proj-release"},
+		{"branch", "-d", "release/2.1"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
 func TestDeleteWorktreesWithBranchWithoutWorktreeSkipsWorktreeRemove(t *testing.T) {
 	run, calls := recordingRunner()
 	item := gitdata.Item{Branch: "bugfix/api-timeout"}

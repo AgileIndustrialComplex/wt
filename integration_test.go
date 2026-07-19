@@ -274,6 +274,56 @@ func TestIntegrationDeleteMarkedBranchWithoutWorktree(t *testing.T) {
 	}
 }
 
+func TestIntegrationDeleteUnmergedBranchRequiresForcePhrase(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	runGit(t, repo, "branch", "wip")
+	runGit(t, repo, "checkout", "wip")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "unmerged work")
+	runGit(t, repo, "checkout", "main")
+	chdir(t, repo)
+
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	var wip *gitdata.Item
+	for i := range items {
+		if items[i].Branch == "wip" {
+			wip = &items[i]
+		}
+	}
+	if wip == nil || !wip.Unmerged {
+		t.Fatalf("items = %+v, want a wip branch marked Unmerged", items)
+	}
+
+	// order: main (cursor 0), wip (cursor 1) -> down, mark, D, Enter (opens
+	// the force-delete phrase prompt), type the required phrase, Enter.
+	keys := []tea.KeyMsg{keyDown, keyRune('c'), keyRune('D'), keyEnter}
+	for _, r := range ui.ForceDeleteConfirmPhrase {
+		keys = append(keys, keyRune(r))
+	}
+	keys = append(keys, keyEnter)
+
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keys...)
+
+	if len(result.Delete) != 1 || result.Delete[0].Branch != "wip" {
+		t.Fatalf("result.Delete = %+v, want [wip]", result.Delete)
+	}
+	applyResult(t, result)
+
+	branches := runGit(t, repo, "branch", "--list", "wip")
+	if strings.TrimSpace(branches) != "" {
+		t.Fatalf("branch wip still exists after force delete: %q", branches)
+	}
+}
+
 func worktreePathForBranch(t *testing.T, repo, branch string) string {
 	t.Helper()
 	out := runGit(t, repo, "worktree", "list", "--porcelain")

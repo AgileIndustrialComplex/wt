@@ -66,6 +66,8 @@ Highlight a branch or worktree and press `c` to mark or unmark it as part of the
 
 Once at least one item is marked, a hint line appears below the list telling you which key acts on the marked set. Press `D` to delete every marked branch: a confirmation screen lists the branches (and worktree paths, where applicable) about to be removed, `Enter` runs the deletion (`git worktree remove` for items with a worktree, then `git branch -d` for each), and any cancel key (`Esc`, `Ctrl-C`, `q`) backs out without touching Git state or losing your marked selection.
 
+If any marked branch has unmerged changes, confirming does not delete anything yet — `git branch -d` would refuse it anyway. Instead a second screen lists the unmerged branch(es) and requires you to type the exact phrase `Yes, I want to remove the branch that has changes that have been unmerged.` and press `Enter` before the whole batch (merged and unmerged branches alike) is deleted, force-deleting only the unmerged ones (`git branch -D`). `Esc`/`Ctrl-C` cancels the entire batch and returns to the list without touching Git state.
+
 The picker uses color to distinguish the selected row, current worktree, marked items, worktree tags, locked worktrees, and filter prompt. Pass `--no-color` to disable all ANSI styling.
 
 Selecting a worktree changes your shell's directory to it. Selecting a plain branch with no worktree prompts you to either switch to it in place or create a new worktree for it:
