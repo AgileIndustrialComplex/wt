@@ -29,9 +29,10 @@ const (
 )
 
 // ForceDeleteConfirmPhrase is the exact text a user must type to delete a
-// branch with unmerged changes. It must match verbatim (case-sensitive) —
-// this is deliberate friction against losing unmerged work, so it is never
-// made configurable.
+// branch with unmerged changes, or a worktree with modified or untracked
+// files. It must match verbatim (case-sensitive) — this is deliberate
+// friction against losing uncommitted work, so it is never made
+// configurable.
 const ForceDeleteConfirmPhrase = "delete"
 
 // Result is what the picker produced when the program exited.
@@ -125,9 +126,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateConfirmDelete handles the approval step shown after pressing D with
 // at least one branch marked. Enter confirms: if any marked branch is
-// unmerged, it advances to modeConfirmForceDelete for an explicit
-// phrase-typed confirmation instead of quitting immediately. Any cancel key
-// stops the operation and returns to the list without quitting the picker.
+// unmerged, or any marked worktree is dirty, it advances to
+// modeConfirmForceDelete for an explicit phrase-typed confirmation instead
+// of quitting immediately. Any cancel key stops the operation and returns to
+// the list without quitting the picker.
 func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if isCancel(msg) {
 		m.mode = modeList
@@ -135,7 +137,7 @@ func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.Type == tea.KeyEnter {
 		marked := m.Marked()
-		if hasUnmergedBranch(marked) {
+		if hasUnmergedBranch(marked) || hasDirtyWorktree(marked) {
 			m.forceConfirmInput = ""
 			m.mode = modeConfirmForceDelete
 			return m, nil
@@ -148,9 +150,10 @@ func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateConfirmForceDelete handles the phrase-typed approval step shown
-// when at least one marked branch has unmerged changes. Esc/Ctrl-C cancel
-// back to the list; Enter only confirms and quits (with the full marked set
-// in Result.Delete) when the typed text matches ForceDeleteConfirmPhrase
+// when at least one marked branch has unmerged changes, or at least one
+// marked worktree has modified or untracked files. Esc/Ctrl-C cancel back to
+// the list; Enter only confirms and quits (with the full marked set in
+// Result.Delete) when the typed text matches ForceDeleteConfirmPhrase
 // exactly, otherwise it is a no-op so the user can keep correcting the
 // input. "q" is not treated as cancel here since it is valid input text.
 func (m Model) updateConfirmForceDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -185,6 +188,18 @@ func (m Model) updateConfirmForceDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func hasUnmergedBranch(items []gitdata.Item) bool {
 	for _, item := range items {
 		if item.Unmerged && !item.Detached {
+			return true
+		}
+	}
+	return false
+}
+
+// hasDirtyWorktree reports whether any item's worktree has modified or
+// untracked files — the condition that makes `git worktree remove` (without
+// --force) refuse to delete it.
+func hasDirtyWorktree(items []gitdata.Item) bool {
+	for _, item := range items {
+		if item.Dirty {
 			return true
 		}
 	}
@@ -523,10 +538,21 @@ func (m Model) View() string {
 		b.WriteString("[Enter] confirm  [Esc] cancel\n")
 		return b.String()
 	case modeConfirmForceDelete:
-		b.WriteString("The following branch(es) have unmerged changes and will be permanently lost:\n")
-		for _, item := range m.Marked() {
-			if item.Unmerged && !item.Detached {
-				fmt.Fprintf(&b, "  %s\n", item.Branch)
+		marked := m.Marked()
+		if hasUnmergedBranch(marked) {
+			b.WriteString("The following branch(es) have unmerged changes and will be permanently lost:\n")
+			for _, item := range marked {
+				if item.Unmerged && !item.Detached {
+					fmt.Fprintf(&b, "  %s\n", item.Branch)
+				}
+			}
+		}
+		if hasDirtyWorktree(marked) {
+			b.WriteString("The following worktree(s) have modified or untracked files that will be permanently lost:\n")
+			for _, item := range marked {
+				if item.Dirty {
+					fmt.Fprintf(&b, "  %s  %s\n", item.Branch, item.Path)
+				}
 			}
 		}
 		fmt.Fprintf(&b, "Type %q and press Enter to proceed, or Esc to cancel:\n\n", ForceDeleteConfirmPhrase)
@@ -647,7 +673,7 @@ func (m Model) helpView() string {
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
 		"  mark       : c  (selection)",
-		"  delete     : D  (marked branches, asks to confirm; unmerged branches require typing a phrase)",
+		"  delete     : D  (marked branches, asks to confirm; unmerged branches or dirty worktrees require typing a phrase)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",

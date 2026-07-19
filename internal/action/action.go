@@ -55,8 +55,9 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 }
 
 // DeleteWorktrees removes each item's worktree, if it has one, via
-// `git worktree remove`, then deletes the branch via `git branch -d`, or
-// `git branch -D` (force) when item.Unmerged is set. Callers must only pass
+// `git worktree remove`, or `git worktree remove --force` when item.Dirty is
+// set, then deletes the branch via `git branch -d`, or `git branch -D`
+// (force) when item.Unmerged is set. Callers must only pass Dirty or
 // Unmerged items after the user has given explicit, phrase-typed consent
 // (see internal/ui's modeConfirmForceDelete) — this function performs no
 // confirmation of its own. Items without a worktree skip straight to the
@@ -78,7 +79,12 @@ func deleteWorktreesWith(run runnerFunc, items []gitdata.Item) error {
 			continue
 		}
 		if item.HasWorktree() {
-			if err := run("worktree", "remove", item.Path); err != nil {
+			args := []string{"worktree", "remove"}
+			if item.Dirty {
+				args = append(args, "--force")
+			}
+			args = append(args, item.Path)
+			if err := run(args...); err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
 				continue
 			}
