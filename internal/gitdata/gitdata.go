@@ -38,6 +38,7 @@ type worktreeInfo struct {
 	branch   string // short branch name, "" if detached
 	locked   bool
 	detached bool
+	prunable bool
 }
 
 // Collect runs git branch and git worktree list against the repository
@@ -124,11 +125,13 @@ func collect(run runnerFunc) ([]Item, error) {
 			item.Path = w.path
 			item.Locked = w.locked
 			item.IsCurrent = normalizePath(w.path) == top
-			dirty, err := isDirty(run, w.path)
-			if err != nil {
-				return nil, err
+			if !w.prunable {
+				dirty, err := isDirty(run, w.path)
+				if err != nil {
+					return nil, err
+				}
+				item.Dirty = dirty
 			}
-			item.Dirty = dirty
 		}
 		items = append(items, item)
 	}
@@ -136,9 +139,13 @@ func collect(run runnerFunc) ([]Item, error) {
 		if !w.detached {
 			continue
 		}
-		dirty, err := isDirty(run, w.path)
-		if err != nil {
-			return nil, err
+		dirty := false
+		if !w.prunable {
+			var err error
+			dirty, err = isDirty(run, w.path)
+			if err != nil {
+				return nil, err
+			}
 		}
 		items = append(items, Item{
 			Branch:    "(detached)",
@@ -197,6 +204,10 @@ func parseWorktreePorcelain(out string) []worktreeInfo {
 			if cur != nil {
 				cur.locked = true
 			}
+		case "prunable":
+			if cur != nil {
+				cur.prunable = true
+			}
 		}
 	}
 	flush()
@@ -222,7 +233,7 @@ func normalizePath(p string) string {
 // files — the same condition that makes `git worktree remove` (without
 // --force) refuse to delete it.
 func isDirty(run runnerFunc, path string) (bool, error) {
-	out, err := run("-C", path, "status", "--porcelain")
+	out, err := run("-C", path, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return false, err
 	}
