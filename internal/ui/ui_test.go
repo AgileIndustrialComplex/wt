@@ -213,6 +213,26 @@ func TestViewKeepsCursorInsideTerminalHeight(t *testing.T) {
 	}
 }
 
+func TestViewShowsDirectoryOnlyForHighlightedItem(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	view := m.View()
+	if !strings.Contains(view, "/repo/proj (current)") {
+		t.Fatalf("View() missing highlighted item's directory:\n%s", view)
+	}
+	if strings.Contains(view, "/repo/proj-login") || strings.Contains(view, "/repo/proj-release") {
+		t.Fatalf("View() shows directory for non-highlighted item:\n%s", view)
+	}
+
+	m = send(t, m, key('j'))
+	view = m.View()
+	if !strings.Contains(view, "/repo/proj-login") {
+		t.Fatalf("View() missing directory after moving highlight:\n%s", view)
+	}
+	if strings.Contains(view, "/repo/proj (current)") || strings.Contains(view, "/repo/proj-release") {
+		t.Fatalf("View() shows directory for non-highlighted item after move:\n%s", view)
+	}
+}
+
 func TestNoColorViewContainsNoANSISequences(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	if view := m.View(); strings.Contains(view, "\x1b[") {

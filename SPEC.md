@@ -67,14 +67,15 @@ On launch, the tool renders a single scrollable list, current item first:
 ```
 Select branch or worktree (/ to filter, ? for help)
 > ● main                     (current)         ~/proj
-  ○ feature/login            [worktree]        ~/proj-login
+  ○ feature/login            [worktree]
   ○ bugfix/api-timeout                          (no worktree)
-  ○ release/2.1              [worktree, locked] ~/proj-release
+  ○ release/2.1              [worktree, locked]
 ```
 
 - `●` marks the branch/worktree matching the shell's current directory.
 - `[worktree]` tags branches with a dedicated worktree; untagged branches are plain local branches with no worktree.
 - `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks or removes worktrees.
+- The directory path is shown only for the currently highlighted item; moving the cursor reveals that item's path and hides the previous one.
 
 **Key bindings** (Vim + Emacs + arrows):
 
