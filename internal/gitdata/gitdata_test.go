@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -14,6 +15,10 @@ func TestRunGitUsesStableLocale(t *testing.T) {
 	dir := t.TempDir()
 	git := filepath.Join(dir, "git")
 	script := "#!/bin/sh\nif [ \"$LC_ALL\" = C ]; then\n  echo 'fatal: not a git repository' >&2\nelse\n  echo 'fatal: kein Git-Repository' >&2\nfi\nexit 128\n"
+	if runtime.GOOS == "windows" {
+		git += ".bat"
+		script = "@echo off\r\nif \"%LC_ALL%\"==\"C\" (\r\n  echo fatal: not a git repository 1>&2\r\n) else (\r\n  echo fatal: kein Git-Repository 1>&2\r\n)\r\nexit /b 128\r\n"
+	}
 	if err := os.WriteFile(git, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
