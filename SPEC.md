@@ -137,7 +137,7 @@ The authoritative collector and action implementations are in
 **Integration tests** (real repositories):
 - Use `t.TempDir()` to create scratch repositories via actual `git init`, `git commit --allow-empty`, and `git worktree add` commands.
 - Drive the action and collection layers against the scratch repository and assert the resulting paths and Git repository state.
-- Cover switching a plain branch, resolving an existing worktree, and creating a worktree.
+- Cover switching a plain branch, resolving an existing worktree, creating a worktree, and removing a worktree after confirmation.
 
 ## 7. Building
 
