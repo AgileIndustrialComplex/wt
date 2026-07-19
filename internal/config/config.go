@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,6 +79,12 @@ func Load() (Config, error) {
 	}
 	if cfg.WorktreeRoot != "" {
 		cfg.WorktreeRoot = expandHome(cfg.WorktreeRoot)
+	}
+	if cfg.DefaultAction != ActionPrompt && cfg.DefaultAction != ActionSwitch && cfg.DefaultAction != ActionWorktree {
+		return cfg, fmt.Errorf("invalid default_action %q", cfg.DefaultAction)
+	}
+	if cfg.Keymap != KeymapVim && cfg.Keymap != KeymapEmacs && cfg.Keymap != KeymapArrowsOnly {
+		return cfg, fmt.Errorf("invalid keymap %q", cfg.Keymap)
 	}
 	return cfg, nil
 }

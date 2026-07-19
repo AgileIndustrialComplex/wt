@@ -84,6 +84,10 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 			"branch refs/heads/release/2.1",
 			"locked",
 			"",
+			"worktree /repo/proj-scratch",
+			"HEAD jkl012",
+			"detached",
+			"",
 		}, "\n"),
 		"branch":    "main\nfeature/login\nbugfix/api-timeout\nrelease/2.1\n",
 		"rev-parse": "/repo/proj\n",
@@ -99,9 +103,25 @@ func TestCollectMergesBranchesAndWorktrees(t *testing.T) {
 		{Branch: "feature/login", Path: "/repo/proj-login"},
 		{Branch: "bugfix/api-timeout"},
 		{Branch: "release/2.1", Path: "/repo/proj-release", Locked: true},
+		{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true},
 	}
 	if !reflect.DeepEqual(items, want) {
 		t.Fatalf("collect() = %#v, want %#v", items, want)
+	}
+}
+
+func TestCollectMovesCurrentItemFirst(t *testing.T) {
+	fr := fakeRunner{
+		"worktree":  "worktree /repo/proj\nHEAD abc123\nbranch refs/heads/z-current\n",
+		"branch":    "a-first\nz-current\n",
+		"rev-parse": "/repo/proj\n",
+	}
+	items, err := collect(fr.run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].Branch != "z-current" || !items[0].IsCurrent {
+		t.Fatalf("first item = %+v, want current branch", items[0])
 	}
 }
 

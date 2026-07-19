@@ -20,6 +20,7 @@ const (
 	modeList mode = iota
 	modeFilter
 	modeResolve
+	modeLocked
 	modeHelp
 )
 
@@ -33,14 +34,16 @@ type Result struct {
 
 // Model is the bubbletea model for the picker.
 type Model struct {
-	items        []gitdata.Item
-	filtered     []int
-	cursor       int
-	filter       string
-	mode         mode
-	toplevel     string
-	worktreeRoot string
-	noColor      bool
+	items         []gitdata.Item
+	filtered      []int
+	cursor        int
+	filter        string
+	mode          mode
+	toplevel      string
+	worktreeRoot  string
+	noColor       bool
+	defaultAction string
+	keymap        string
 
 	result   Result
 	quitting bool
@@ -51,11 +54,17 @@ type Model struct {
 // to propose new worktree paths. worktreeRoot overrides where new worktrees
 // are proposed; if empty, new worktrees are proposed as siblings of toplevel.
 func New(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool) Model {
+	return NewConfigured(items, toplevel, worktreeRoot, noColor, config.ActionPrompt, config.KeymapVim)
+}
+
+func NewConfigured(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool, defaultAction, keymap string) Model {
 	m := Model{
-		items:        items,
-		toplevel:     toplevel,
-		worktreeRoot: worktreeRoot,
-		noColor:      noColor,
+		items:         items,
+		toplevel:      toplevel,
+		worktreeRoot:  worktreeRoot,
+		noColor:       noColor,
+		defaultAction: defaultAction,
+		keymap:        keymap,
 	}
 	m.applyFilter()
 	return m
@@ -83,9 +92,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateFilter(keyMsg)
 	case modeResolve:
 		return m.updateResolve(keyMsg)
+	case modeLocked:
+		return m.updateLocked(keyMsg)
 	default:
 		return m.updateList(keyMsg)
 	}
+}
+
+func (m Model) updateLocked(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if isCancel(msg) {
+		m.mode = modeList
+		return m, nil
+	}
+	if msg.Type == tea.KeyEnter {
+		if item := m.selected(); item != nil {
+			m.result = Result{Item: *item}
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
 }
 
 func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -205,11 +231,26 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if item.HasWorktree() {
+			if item.Locked {
+				m.mode = modeLocked
+				return m, nil
+			}
 			m.result = Result{Item: *item}
 			m.quitting = true
 			return m, tea.Quit
 		}
-		m.mode = modeResolve
+		switch m.defaultAction {
+		case config.ActionSwitch:
+			m.result = Result{Item: *item, Resolution: config.ActionSwitch}
+			m.quitting = true
+			return m, tea.Quit
+		case config.ActionWorktree:
+			m.result = Result{Item: *item, Resolution: config.ActionWorktree, NewWorktreePath: m.proposeWorktreePath(item.Branch)}
+			m.quitting = true
+			return m, tea.Quit
+		default:
+			m.mode = modeResolve
+		}
 		return m, nil
 	}
 	return m, nil
@@ -307,12 +348,18 @@ func (m Model) View() string {
 			fmt.Fprintf(&b, "'%s' has no worktree. [s]witch here  [w]orktree at %s  [Esc] cancel\n", item.Branch, path)
 		}
 		return b.String()
+	case modeLocked:
+		item := m.selected()
+		if item != nil {
+			fmt.Fprintf(&b, "Worktree at %s is locked. [Enter] continue  [Esc] cancel\n", item.Path)
+		}
+		return b.String()
 	}
 
 	if m.mode == modeFilter {
 		fmt.Fprintf(&b, "Filter> %s\n", m.filter)
 	} else {
-		b.WriteString("Select branch or worktree (/ to filter, ? for help)\n")
+		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, ? for help)\n", m.navigationHint())
 	}
 
 	for i, idx := range m.filtered {
@@ -348,10 +395,10 @@ func (m Model) View() string {
 }
 
 func (m Model) helpView() string {
+	navigation := m.navigationHint()
 	return strings.Join([]string{
 		"Key bindings:",
-		"  down       : Down, j, Ctrl-N",
-		"  up         : Up, k, Ctrl-P",
+		"  navigation : " + navigation,
 		"  page down  : Ctrl-D",
 		"  page up    : Ctrl-U",
 		"  top/bottom : g / G",
@@ -362,4 +409,15 @@ func (m Model) helpView() string {
 		"",
 		"press any key to return",
 	}, "\n")
+}
+
+func (m Model) navigationHint() string {
+	switch m.keymap {
+	case config.KeymapEmacs:
+		return "Ctrl-N/Ctrl-P"
+	case config.KeymapArrowsOnly:
+		return "Up/Down"
+	default:
+		return "j/k"
+	}
 }

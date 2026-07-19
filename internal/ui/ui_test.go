@@ -115,6 +115,29 @@ func TestEnterOnBranchWithNoWorktreeEntersResolveMode(t *testing.T) {
 	}
 }
 
+func TestConfiguredDefaultActionSkipsResolvePrompt(t *testing.T) {
+	m := NewConfigured(testItems(), "/repo/proj", "", true, config.ActionWorktree, config.KeymapEmacs)
+	m = send(t, m, key('j'), key('j'), keyType(tea.KeyEnter))
+	if m.Result().Resolution != config.ActionWorktree || !m.quitting {
+		t.Fatalf("Result() = %+v, want immediate worktree resolution", m.Result())
+	}
+	if got := NewConfigured(testItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapEmacs).navigationHint(); got != "Ctrl-N/Ctrl-P" {
+		t.Fatalf("navigationHint() = %q", got)
+	}
+}
+
+func TestLockedWorktreeRequiresConfirmation(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('G'), keyType(tea.KeyEnter))
+	if m.mode != modeLocked || m.quitting {
+		t.Fatalf("locked selection was not paused: %+v", m)
+	}
+	m = send(t, m, keyType(tea.KeyEnter))
+	if !m.quitting || m.Result().Item.Branch != "release/2.1" {
+		t.Fatalf("locked confirmation result = %+v", m.Result())
+	}
+}
+
 func TestResolveSwitchHere(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('j'), keyType(tea.KeyEnter), key('s'))

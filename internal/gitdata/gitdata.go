@@ -17,6 +17,7 @@ type Item struct {
 	Path      string // "" if the branch has no worktree (including no main checkout)
 	IsCurrent bool
 	Locked    bool
+	Detached  bool
 }
 
 // HasWorktree reports whether the branch is checked out anywhere.
@@ -93,7 +94,7 @@ func collect(run runnerFunc) ([]Item, error) {
 		return nil, err
 	}
 
-	items := make([]Item, 0, len(branches))
+	items := make([]Item, 0, len(branches)+len(worktrees))
 	for _, b := range branches {
 		item := Item{Branch: b}
 		if w, ok := byBranch[b]; ok {
@@ -102,6 +103,24 @@ func collect(run runnerFunc) ([]Item, error) {
 			item.IsCurrent = normalizePath(w.path) == top
 		}
 		items = append(items, item)
+	}
+	for _, w := range worktrees {
+		if !w.detached {
+			continue
+		}
+		items = append(items, Item{
+			Branch:    "(detached)",
+			Path:      w.path,
+			IsCurrent: normalizePath(w.path) == top,
+			Locked:    w.locked,
+			Detached:  true,
+		})
+	}
+	for i := range items {
+		if items[i].IsCurrent {
+			items[0], items[i] = items[i], items[0]
+			break
+		}
 	}
 	return items, nil
 }
