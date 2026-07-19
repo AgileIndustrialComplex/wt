@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -190,5 +192,30 @@ func TestHelpOverlayReturnsToList(t *testing.T) {
 	m = send(t, m, key('x'))
 	if m.mode != modeList {
 		t.Fatalf("mode after key in help = %v, want modeList", m.mode)
+	}
+}
+
+func TestViewKeepsCursorInsideTerminalHeight(t *testing.T) {
+	items := make([]gitdata.Item, 10)
+	for i := range items {
+		items[i].Branch = fmt.Sprintf("branch-%d", i)
+	}
+	m := New(items, "/repo/proj", "", true)
+	next, _ := m.Update(tea.WindowSizeMsg{Height: 4})
+	m = next.(Model)
+	m = send(t, m, key('G'))
+	view := m.View()
+	if strings.Count(view, "\n") != 4 {
+		t.Fatalf("View() rendered %d lines, want 4:\n%s", strings.Count(view, "\n"), view)
+	}
+	if !strings.Contains(view, "> ○ branch-9") || strings.Contains(view, "branch-0") {
+		t.Fatalf("View() did not keep cursor visible:\n%s", view)
+	}
+}
+
+func TestNoColorViewContainsNoANSISequences(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	if view := m.View(); strings.Contains(view, "\x1b[") {
+		t.Fatalf("no-color View() contains ANSI sequence: %q", view)
 	}
 }
