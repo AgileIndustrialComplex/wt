@@ -228,7 +228,7 @@ func TestIntegrationDeleteMarkedWorktree(t *testing.T) {
 
 	// order: main (cursor 0), zeta-wt (cursor 1) -> down, mark, D, Enter.
 	m := ui.New(items, top, "", true)
-	result := drivePicker(t, m, keyDown, keyRune('m'), keyRune('D'), keyEnter)
+	result := drivePicker(t, m, keyDown, keyRune('c'), keyRune('D'), keyEnter)
 
 	if len(result.Delete) != 1 || result.Delete[0].Branch != "zeta-wt" {
 		t.Fatalf("result.Delete = %+v, want [zeta-wt]", result.Delete)
