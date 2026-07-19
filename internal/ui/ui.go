@@ -255,7 +255,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 		return m, nil
 
-	case msg.String() == "m":
+	case msg.String() == "c":
 		m.toggleMarked()
 		return m, nil
 
@@ -465,7 +465,7 @@ func (m Model) View() string {
 		}
 		fmt.Fprintf(&b, "%s%s\n", prompt, m.filter)
 	} else {
-		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, ? for help)\n", m.navigationHint())
+		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, c to mark, ? for help)\n", m.navigationHint())
 	}
 
 	start, end := m.visibleRange()
@@ -573,7 +573,7 @@ func (m Model) helpView() string {
 		"  page up    : Ctrl-U",
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
-		"  mark       : m  (worktrees only)",
+		"  mark       : c  (worktrees only; selection)",
 		"  delete     : D  (marked worktrees, asks to confirm)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
