@@ -258,3 +258,12 @@ func TestColorViewContainsANSISequences(t *testing.T) {
 		t.Fatalf("color View() contains no ANSI sequence: %q", view)
 	}
 }
+
+func TestSelectedStyleResumesAfterNestedStyleReset(t *testing.T) {
+	nested := currentStyle.Render("●")
+	got := renderSelected("> " + nested + " main")
+	want := selectedStyle.Render("> "+nested) + selectedStyle.Render(" main")
+	if got != want {
+		t.Fatalf("renderSelected() = %q, want %q", got, want)
+	}
+}

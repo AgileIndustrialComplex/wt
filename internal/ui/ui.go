@@ -354,6 +354,16 @@ var (
 	filterStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("6")).Bold(true) // cyan
 )
 
+func renderSelected(line string) string {
+	parts := strings.SplitAfter(line, "\x1b[0m")
+	for i, part := range parts {
+		if part != "" {
+			parts[i] = selectedStyle.Render(part)
+		}
+	}
+	return strings.Join(parts, "")
+}
+
 func (m Model) View() string {
 	if m.quitting {
 		return ""
@@ -437,7 +447,7 @@ func (m Model) View() string {
 			line += suffix
 		}
 		if !m.noColor && i == m.cursor {
-			line = selectedStyle.Render(line)
+			line = renderSelected(line)
 		}
 		b.WriteString(line)
 		b.WriteString("\n")
