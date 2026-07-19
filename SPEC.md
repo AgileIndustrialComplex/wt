@@ -89,8 +89,8 @@ Selecting a plain branch with no worktree and confirming prompts one extra line:
 ```
 This directly resolves the stated pain point: instead of `git switch` erroring out, the tool offers the two valid resolutions inline.
 
-**Deleting branches with unmerged changes, or worktrees with untracked
-files:** `git branch -d` (the non-force delete `wt` uses for merged
+**Deleting branches with unmerged changes, or worktrees with modified or
+untracked files:** `git branch -d` (the non-force delete `wt` uses for merged
 branches) refuses branches not fully merged, and `git worktree remove`
 (the non-force removal `wt` uses by default) refuses worktrees with modified
 or untracked files. `wt` detects both ahead of time — each `Item` carries an
