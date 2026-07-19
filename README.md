@@ -49,7 +49,7 @@ wt
 ```
 
 ```
-Select branch or worktree (/ to filter, ? for help)
+Select branch or worktree (j/k, / to filter, c to mark, ? for help)
 > ● main                     (current)         ~/proj
   ○ feature/login            [worktree]
   ○ bugfix/api-timeout                          (no worktree)

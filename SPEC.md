@@ -68,7 +68,6 @@ first; the remaining branches follow in Git's original order, then detached
 worktrees in their original order:
 
 ```
-Select branch or worktree (/ to filter, ? for help)
 > ● main                     (current)         ~/proj
   ○ feature/login            [worktree]
   ○ bugfix/api-timeout                          (no worktree)
