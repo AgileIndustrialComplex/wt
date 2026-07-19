@@ -70,7 +70,7 @@ func runGit(args ...string) (string, error) {
 }
 
 func collect(run runnerFunc) ([]Item, error) {
-	wtOut, err := run("worktree", "list", "--porcelain")
+	wtOut, err := run("worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +125,8 @@ func collect(run runnerFunc) ([]Item, error) {
 	return items, nil
 }
 
-// parseWorktreePorcelain parses the output of `git worktree list --porcelain`.
-// Entries are separated by blank lines; each entry has a `worktree <path>`
+// parseWorktreePorcelain parses the output of `git worktree list --porcelain -z`.
+// Entries are separated by empty records; each entry has a `worktree <path>`
 // line followed by either `branch <ref>` or `detached`, and may include a
 // bare `locked` or `locked <reason>` line and a bare `prunable <reason>` line.
 func parseWorktreePorcelain(out string) []worktreeInfo {
@@ -140,8 +140,7 @@ func parseWorktreePorcelain(out string) []worktreeInfo {
 		}
 	}
 
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimRight(line, "\r")
+	for _, line := range strings.Split(out, "\x00") {
 		if line == "" {
 			flush()
 			continue
