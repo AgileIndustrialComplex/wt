@@ -68,17 +68,17 @@ worktrees in their original order:
 
 ```
 Select branch or worktree (/ to filter, ? for help)
-> [ ] ● main                     (current)         ~/proj
-  [ ] ○ feature/login            [worktree]
-      ○ bugfix/api-timeout                          (no worktree)
-  [x] ○ release/2.1              [worktree, locked]
+> ● main                     (current)         ~/proj
+  ○ feature/login            [worktree]
+  ○ bugfix/api-timeout                          (no worktree)
+  ○ release/2.1              [worktree, locked]
 ```
 
 - `●` marks the branch/worktree matching the shell's current directory.
 - `[worktree]` tags branches with a dedicated worktree; untagged branches are plain local branches with no worktree.
 - `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks or removes worktrees.
 - The directory path is shown only for the currently highlighted item; moving the cursor reveals that item's path and hides the previous one.
-- Highlighting a worktree item and pressing `c` toggles a `[x]`/`[ ]` checkbox on it; checked state persists as the cursor moves and across filtering. Branches with no worktree cannot be checked. Checking is purely a UI marker in this version — no bulk action consumes it yet, and any future action that does will require its own explicit approval step before it touches Git state.
+- Highlighting a worktree item and pressing `m` marks or unmarks it. The `[x]`/`[ ]` marker column appears after the first mark and disappears after the last mark is removed. Marked state persists as the cursor moves and across filtering. Branches with no worktree cannot be marked. Marking is purely a persistent UI marker in this version — no action consumes it yet, and any future action that does will require its own explicit approval step before it touches Git state.
 
 **Key bindings** (Vim + Emacs + arrows):
 
@@ -89,7 +89,7 @@ Select branch or worktree (/ to filter, ? for help)
 | Page down / up | `Ctrl-D` / `Ctrl-U` |
 | Jump to top / bottom | `g` / `G` |
 | Filter/search | `/` then type; `Esc` clears |
-| Check/uncheck worktree | `c` |
+| Mark/unmark worktree | `m` |
 | Confirm selection | `Enter` |
 | Cancel | `Esc`, `Ctrl-C`, `q` |
 | Help overlay | `?` |
