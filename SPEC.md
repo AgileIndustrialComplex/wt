@@ -18,10 +18,10 @@
 | Purpose | Library | Why |
 |---|---|---|
 | TUI framework | [`bubbletea`](https://github.com/charmbracelet/bubbletea) (Elm-architecture TUI) | Mature, widely used, handles raw terminal mode, resize, and key events across platforms including Windows (via `x/term`). |
-| List widget + fuzzy filter | [`bubbles/list`](https://github.com/charmbracelet/bubbles) or a minimal hand-rolled list | Gives arrow-key navigation, filtering, and pagination for free; still small. |
-| Styling | [`lipgloss`](https://github.com/charmbracelet/lipgloss) | Optional color/highlight for the selected row; degrades gracefully on dumb terminals. |
+| List and substring filter | Hand-rolled Bubble Tea model | Keeps navigation, filtering, and pagination behavior explicit and small. |
+| Styling | [`lipgloss`](https://github.com/charmbracelet/lipgloss) | Highlights the selected row; `--no-color` disables that styling. |
 | Git interaction | none (shell out to system `git` via `os/exec`) | Avoids embedding a Git implementation (e.g. `go-git`), which is heavyweight and can diverge in behavior from the user's actual Git config/hooks/credential helpers. Shelling out guarantees identical behavior to manual `git` commands. |
-| CLI flags | Go standard `flag` package or [`cobra`](https://github.com/spf13/cobra) | `cobra` only if subcommands grow; `flag` is sufficient for a single-purpose tool and keeps the dependency tree minimal. |
+| CLI flags | Go standard `flag` package | Sufficient for a single-purpose tool and keeps the dependency tree minimal. |
 
 No `fzf` dependency is required, but the design deliberately keeps the same *interaction feel* the user's `fzf` one-liner already provides, while merging branches and worktrees into one list and natively understanding worktree-vs-plain-branch semantics — avoiding the "already checked out elsewhere" dead end of `git switch`.
 
@@ -49,13 +49,12 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 │  action (executor)   │
 │  - plain branch  → git switch <branch>       (in cwd repo)
 │  - worktree path → emit cd path to wrapper   (no git mutation)
-│  - branch checked  → prompt: open as new     needed
-│    out elsewhere    worktree, or switch there
+│  - existing path → return it to the shell wrapper
 └──────────────────────┘
 ```
 
 **Data flow:**
-1. `gitdata` runs `git branch --list --format='%(refname:short)|%(worktreepath)'` and `git worktree list --porcelain`, parses both, and produces a single normalized list of `Item`s tagged as `branch` or `worktree`, cross-referencing which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
+1. `gitdata` runs `git branch --list --format='%(refname:short)'` and `git worktree list --porcelain -z`, parses both, and produces a single normalized list of items, cross-referencing which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
 2. `ui` renders the list, handles keystrokes purely as state transitions (no side effects) until the user confirms.
 3. `action` executes exactly one of: `git switch`, `git worktree add`, or (for worktrees) a directory change — nothing else touches repository state.
 
@@ -75,7 +74,7 @@ Select branch or worktree (/ to filter, ? for help)
 
 - `●` marks the branch/worktree matching the shell's current directory.
 - `[worktree]` tags branches with a dedicated worktree; untagged branches are plain local branches with no worktree.
-- `[locked]` reflects `git worktree list --porcelain` locked state — selecting it warns before any destructive-adjacent action, though `wt` never unlocks/removes worktrees itself.
+- `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks or removes worktrees.
 
 **Key bindings** (Vim + Emacs + arrows):
 
@@ -102,7 +101,7 @@ This directly resolves the stated pain point: instead of `git switch` erroring o
 
 ```
 wt                     # interactive picker, default action
-wt --path-only         # print chosen path/branch, no cd (for scripting)
+wt --path-only         # print a selected worktree path for shell integration
 wt --worktree-root DIR # base dir for new worktrees (overrides config)
 wt --no-color
 wt --version / --help
@@ -116,24 +115,7 @@ default_action = "prompt"       # prompt | switch | worktree
 keymap = "vim"                  # vim | emacs | arrows-only (all always active; affects hint text only)
 ```
 
-**Shell integration (cwd preservation):** since a child process cannot `cd` its parent shell, `wt` prints the destination path to stdout (with `--path-only`) and ships a thin shell function installed via `wt init <shell>`:
-
-```bash
-# added to .bashrc / .zshrc by `wt init bash`
-wt() {
-  local dest
-  dest=$(command wt --path-only "$@") || return
-  [ -n "$dest" ] && cd -- "$dest"
-}
-```
-```fish
-# added by `wt init fish`
-function wt
-    set -l dest (command wt --path-only $argv)
-    test -n "$dest"; and cd $dest
-end
-```
-This preserves cwd unless a switch actually happens, per the constraint, and never wraps or overrides real `git` subcommands.
+**Shell integration (cwd preservation):** since a child process cannot `cd` its parent shell, `wt --path-only` prints a selected worktree destination and `wt init bash|zsh|fish` emits a thin wrapper that changes directory when that output is non-empty. Help, version, explicit `--path-only`, and `init` invocations pass through to the binary. This preserves cwd unless the user selects a different worktree and never wraps or overrides real `git` subcommands. The emitted wrapper source in `cmd/wt/shellinit.go` is authoritative.
 
 **Core snippet — merging branches and worktrees:**
 
@@ -184,33 +166,13 @@ func doSwitch(item Item) error {
 
 **Unit tests** (no real Git needed):
 - Parsers: feed canned `git branch --format=...` and `git worktree list --porcelain` output (detached HEAD, locked/prunable worktrees, branch names with slashes) and assert correct `Item` merging.
-- UI state machine: `bubbletea`'s `Update` is pure — test key sequences (`j j k Enter`, `/feat Enter`) against expected model state using `teatest` (bundled with bubbletea), no real terminal needed.
+- UI state machine: `bubbletea`'s `Update` is pure; test key sequences against expected model state directly and with the separate `teatest` module, with no real terminal needed.
 
 **Integration tests** (real repositories):
-- Use `t.TempDir()` to create scratch repos via actual `git init`, `git commit --allow-empty`, `git worktree add`, then run the compiled `wt` binary against them (via `os/exec`) and assert on stdout/exit code.
-- Golden-file tests for `--path-only` output across scenarios: plain branch switch, existing worktree switch, branch-with-no-worktree prompt.
-- Cross-platform path handling test (Windows path separators) run only on the Windows CI runner.
+- Use `t.TempDir()` to create scratch repositories via actual `git init`, `git commit --allow-empty`, and `git worktree add` commands.
+- Drive the Bubble Tea model with `teatest` and assert the resulting selection and Git repository state.
+- Cover switching a plain branch, selecting an existing worktree, creating a worktree, and cancellation.
 
-**CI pipeline** (GitHub Actions):
-```yaml
-strategy:
-  matrix:
-    os: [ubuntu-latest, macos-latest, windows-latest]
-steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-go@v5
-  - run: go vet ./...
-  - run: go test ./... -race -cover
-  - run: golangci-lint run
-```
-Gate merges on all three OS legs passing.
+## 7. Building
 
-## 7. Deployment Plan
-
-- **Versioning:** SemVer tags (`v1.0.0`); version baked in at build time via `-ldflags "-X main.version=$(git describe --tags)"`.
-- **Packaging:**
-  - **Homebrew** (macOS/Linux): a `homebrew-tap` formula (`brew install <tap>/wt`) pointing at GitHub release binaries. Check for name clashes with existing casks/formulae before publishing to a shared tap — consider `wt-switch` as a fallback formula name if `wt` is taken.
-  - **Binaries**: [`goreleaser`](https://goreleaser.com) cross-builds and publishes `.tar.gz`/`.zip` artifacts for `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64` on every tag push, attached to a GitHub Release.
-  - **Scoop** (Windows) as a secondary manifest pointing at the same release binaries — avoids requiring WSL, though WSL users can also just use the Linux binary.
-  - `pip`/`npm` distribution is deliberately skipped — the binary has no Python/Node dependency, and wrapping a static binary in either ecosystem would only add packaging weight for no benefit.
-- **Release steps:** tag → CI runs test matrix → on green, `goreleaser release` builds and publishes binaries + updates Homebrew tap formula automatically (via goreleaser's `brews:` config) → changelog auto-generated from Conventional Commit messages since last tag.
+The repository currently supports source builds. Run `make build` to produce the `wt` binary, or install the command with `go install github.com/AgileIndustrialComplex/wt/cmd/wt@latest`. Release automation and package-manager distribution are not configured.
