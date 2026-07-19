@@ -100,13 +100,15 @@ func collect(run runnerFunc) ([]Item, error) {
 	}
 	branches := parseLines(brOut)
 
-	mergedOut, err := run("branch", "--format=%(refname:short)", "--merged")
-	if err != nil {
-		return nil, err
-	}
 	merged := make(map[string]bool, len(branches))
-	for _, b := range parseLines(mergedOut) {
-		merged[b] = true
+	if len(branches) > 0 {
+		mergedOut, err := run("branch", "--format=%(refname:short)", "--merged")
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range parseLines(mergedOut) {
+			merged[b] = true
+		}
 	}
 
 	top, err := toplevel(run)
