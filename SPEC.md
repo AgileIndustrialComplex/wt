@@ -117,61 +117,19 @@ keymap = "vim"                  # vim | emacs | arrows-only (all always active; 
 
 **Shell integration (cwd preservation):** since a child process cannot `cd` its parent shell, `wt --path-only` prints a selected worktree destination and `wt init bash|zsh|fish` emits a thin wrapper that changes directory when that output is non-empty. Help, version, explicit `--path-only`, and `init` invocations pass through to the binary. This preserves cwd unless the user selects a different worktree and never wraps or overrides real `git` subcommands. The emitted wrapper source in `cmd/wt/shellinit.go` is authoritative.
 
-**Core snippet — merging branches and worktrees:**
-
-```go
-type Item struct {
-    Branch     string
-    Path       string // "" if no worktree
-    IsCurrent  bool
-    Locked     bool
-}
-
-func collect() ([]Item, error) {
-    wtOut, err := exec.Command("git", "worktree", "list", "--porcelain").Output()
-    if err != nil { return nil, fmt.Errorf("git worktree list: %w", err) }
-    worktrees := parseWorktreePorcelain(wtOut) // map[branch]Item
-
-    brOut, err := exec.Command("git", "branch", "--list",
-        "--format=%(refname:short)").Output()
-    if err != nil { return nil, fmt.Errorf("git branch: %w", err) }
-
-    var items []Item
-    for _, b := range parseLines(brOut) {
-        if wt, ok := worktrees[b]; ok {
-            items = append(items, wt)
-        } else {
-            items = append(items, Item{Branch: b})
-        }
-    }
-    return items, nil
-}
-```
-
-**Action execution** — never reimplements Git logic, only calls it:
-
-```go
-func doSwitch(item Item) error {
-    if item.Path != "" {
-        fmt.Println(item.Path) // consumed by shell wrapper's cd
-        return nil
-    }
-    cmd := exec.Command("git", "switch", item.Branch)
-    cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-    return cmd.Run()
-}
-```
+The authoritative collector and action implementations are in
+`internal/gitdata/gitdata.go` and `internal/action/action.go`.
 
 ## 6. Testing Strategy
 
 **Unit tests** (no real Git needed):
 - Parsers: feed canned `git branch --format=...` and `git worktree list --porcelain` output (detached HEAD, locked/prunable worktrees, branch names with slashes) and assert correct `Item` merging.
-- UI state machine: `bubbletea`'s `Update` is pure; test key sequences against expected model state directly and with the separate `teatest` module, with no real terminal needed.
+- UI state machine: `bubbletea`'s `Update` is pure; test key sequences against expected model state directly, with no real terminal needed.
 
 **Integration tests** (real repositories):
 - Use `t.TempDir()` to create scratch repositories via actual `git init`, `git commit --allow-empty`, and `git worktree add` commands.
-- Drive the Bubble Tea model with `teatest` and assert the resulting selection and Git repository state.
-- Cover switching a plain branch, selecting an existing worktree, creating a worktree, and cancellation.
+- Drive the action and collection layers against the scratch repository and assert the resulting paths and Git repository state.
+- Cover switching a plain branch, resolving an existing worktree, and creating a worktree.
 
 ## 7. Building
 
