@@ -66,8 +66,15 @@ func DeleteWorktrees(items []gitdata.Item) error {
 func deleteWorktreesWith(run runnerFunc, items []gitdata.Item) error {
 	var errs []error
 	for _, item := range items {
+		if item.IsCurrent {
+			errs = append(errs, fmt.Errorf("%s: cannot delete the current worktree", item.Branch))
+			continue
+		}
 		if err := run("worktree", "remove", item.Path); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
+			continue
+		}
+		if item.Detached {
 			continue
 		}
 		if err := run("branch", "-d", item.Branch); err != nil {
