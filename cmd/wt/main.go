@@ -30,7 +30,7 @@ func main() {
 		return
 	}
 
-	pathOnly := flag.Bool("path-only", false, "print the chosen path or branch, no cd (for scripting)")
+	pathOnly := flag.Bool("path-only", false, "print the chosen destination path, no cd (for scripting)")
 	worktreeRoot := flag.String("worktree-root", "", "base directory to propose for new worktrees")
 	noColor := flag.Bool("no-color", false, "disable colored output")
 	showVersion := flag.Bool("version", false, "print version and exit")
