@@ -328,9 +328,9 @@ func (m Model) selected() *gitdata.Item {
 	return &m.items[m.filtered[m.cursor]]
 }
 
-// toggleMarked flips the marked state of the highlighted item. Only items
-// with a worktree can be marked, since marking exists to identify worktrees
-// for a future bulk action.
+// toggleMarked flips the marked state of the highlighted item. Only removable
+// worktrees can be marked: plain branches, the current worktree, and locked
+// worktrees are excluded.
 func (m *Model) toggleMarked() {
 	if m.cursor < 0 || m.cursor >= len(m.filtered) {
 		return
