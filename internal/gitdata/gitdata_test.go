@@ -202,6 +202,22 @@ func TestCollectMarksUnmergedBranches(t *testing.T) {
 	}
 }
 
+func TestCollectSkipsMergedQueryWhenThereAreNoBranches(t *testing.T) {
+	fr := fakeRunner{
+		"worktree list --porcelain -z":            "",
+		"branch --list --format=%(refname:short)": "",
+		"rev-parse --show-toplevel":               "/repo/proj\n",
+	}
+
+	items, err := collect(fr.run)
+	if err != nil {
+		t.Fatalf("collect() error = %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("collect() = %#v, want no items", items)
+	}
+}
+
 func TestParseWorktreePorcelainPreservesSpecialPath(t *testing.T) {
 	out := "worktree /repo/café folder\\name\x00HEAD abc123\x00detached\x00\x00"
 	got := parseWorktreePorcelain(out)
