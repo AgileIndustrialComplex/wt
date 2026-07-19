@@ -202,11 +202,12 @@ func TestMarkTogglesWorktreeItem(t *testing.T) {
 	}
 }
 
-func TestMarkIgnoredOnItemWithoutWorktree(t *testing.T) {
+func TestMarkAllowedOnItemWithoutWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('j'), key('c')) // -> bugfix/api-timeout, no worktree
-	if len(m.Marked()) != 0 {
-		t.Fatalf("Marked() = %+v, want empty for item without a worktree", m.Marked())
+	marked := m.Marked()
+	if len(marked) != 1 || marked[0].Branch != "bugfix/api-timeout" {
+		t.Fatalf("Marked() = %+v, want [bugfix/api-timeout]", marked)
 	}
 }
 
@@ -270,8 +271,8 @@ func TestViewShowsMarkColumnOnlyWhileItemsAreMarked(t *testing.T) {
 	m = send(t, m, key('j')) // bugfix/api-timeout, no worktree
 	view = m.View()
 	line := lineContaining(view, "bugfix/api-timeout")
-	if strings.Contains(line, "[") {
-		t.Fatalf("View() should render no marker for item without a worktree:\n%s", line)
+	if !strings.Contains(line, "[ ]") {
+		t.Fatalf("View() should render an unmarked marker for item without a worktree:\n%s", line)
 	}
 
 	m = send(t, m, key('k'), key('c'))
@@ -357,7 +358,7 @@ func TestConfirmDeleteViewListsMarkedBranches(t *testing.T) {
 	m := New(items, "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c'), key('D'))
 	view := m.View()
-	if !strings.Contains(view, "Delete 2 worktree(s)") {
+	if !strings.Contains(view, "Delete 2 branch(es)") {
 		t.Fatalf("confirm view missing count:\n%s", view)
 	}
 	if !strings.Contains(view, "feature/login") || !strings.Contains(view, "release/2.1") {
@@ -365,6 +366,18 @@ func TestConfirmDeleteViewListsMarkedBranches(t *testing.T) {
 	}
 	if !strings.Contains(view, "[Enter] confirm") || !strings.Contains(view, "[Esc] cancel") {
 		t.Fatalf("confirm view missing key hints:\n%s", view)
+	}
+}
+
+func TestConfirmDeleteViewShowsNoWorktreeForPlainBranch(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('j'), key('c'), key('D')) // mark bugfix/api-timeout, no worktree
+	view := m.View()
+	if !strings.Contains(view, "Delete 1 branch(es)") {
+		t.Fatalf("confirm view missing count:\n%s", view)
+	}
+	if !strings.Contains(view, "bugfix/api-timeout") || !strings.Contains(view, "(no worktree)") {
+		t.Fatalf("confirm view missing branch without worktree:\n%s", view)
 	}
 }
 
@@ -384,10 +397,10 @@ func TestHelpOverlayDocumentsMarkBindingAndSemantics(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
 	view := m.View()
-	if !strings.Contains(view, "mark       : c  (worktrees only; selection)") {
+	if !strings.Contains(view, "mark       : c  (selection)") {
 		t.Fatalf("help overlay missing mark binding:\n%s", view)
 	}
-	if !strings.Contains(view, "delete     : D  (marked worktrees, asks to confirm)") {
+	if !strings.Contains(view, "delete     : D  (marked branches, asks to confirm)") {
 		t.Fatalf("help overlay missing delete semantics:\n%s", view)
 	}
 }

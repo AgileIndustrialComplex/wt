@@ -41,7 +41,7 @@ type Model struct {
 	items         []gitdata.Item
 	filtered      []int
 	cursor        int
-	marked        map[int]bool // keyed by index into items, worktree items only
+	marked        map[int]bool // keyed by index into items
 	filter        string
 	mode          mode
 	toplevel      string
@@ -328,15 +328,15 @@ func (m Model) selected() *gitdata.Item {
 	return &m.items[m.filtered[m.cursor]]
 }
 
-// toggleMarked flips the marked state of the highlighted item. Only removable
-// worktrees can be marked: plain branches, the current worktree, and locked
+// toggleMarked flips the marked state of the highlighted item. Only
+// removable branches can be marked: the current worktree and locked
 // worktrees are excluded.
 func (m *Model) toggleMarked() {
 	if m.cursor < 0 || m.cursor >= len(m.filtered) {
 		return
 	}
 	idx := m.filtered[m.cursor]
-	if !m.items[idx].HasWorktree() || m.items[idx].IsCurrent || m.items[idx].Locked {
+	if m.items[idx].IsCurrent || m.items[idx].Locked {
 		return
 	}
 	m.marked[idx] = !m.marked[idx]
@@ -450,9 +450,13 @@ func (m Model) View() string {
 		return b.String()
 	case modeConfirmDelete:
 		marked := m.Marked()
-		fmt.Fprintf(&b, "Delete %d worktree(s) and their branches?\n", len(marked))
+		fmt.Fprintf(&b, "Delete %d branch(es) (and their worktrees, if any)?\n", len(marked))
 		for _, item := range marked {
-			fmt.Fprintf(&b, "  %s  %s\n", item.Branch, item.Path)
+			path := item.Path
+			if path == "" {
+				path = "(no worktree)"
+			}
+			fmt.Fprintf(&b, "  %s  %s\n", item.Branch, path)
 		}
 		b.WriteString("[Enter] confirm  [Esc] cancel\n")
 		return b.String()
@@ -483,14 +487,11 @@ func (m Model) View() string {
 				mark = currentStyle.Render(mark)
 			}
 		}
-		marker := "   "
-		if item.HasWorktree() {
-			marker = "[ ]"
-			if m.marked[idx] {
-				marker = "[x]"
-				if !m.noColor {
-					marker = markedStyle.Render(marker)
-				}
+		marker := "[ ]"
+		if m.marked[idx] {
+			marker = "[x]"
+			if !m.noColor {
+				marker = markedStyle.Render(marker)
 			}
 		}
 		line := fmt.Sprintf("%s %s %-28s", cursor, mark, item.Branch)
@@ -573,8 +574,8 @@ func (m Model) helpView() string {
 		"  page up    : Ctrl-U",
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
-		"  mark       : c  (worktrees only; selection)",
-		"  delete     : D  (marked worktrees, asks to confirm)",
+		"  mark       : c  (selection)",
+		"  delete     : D  (marked branches, asks to confirm)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",

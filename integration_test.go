@@ -244,6 +244,36 @@ func TestIntegrationDeleteMarkedWorktree(t *testing.T) {
 	}
 }
 
+func TestIntegrationDeleteMarkedBranchWithoutWorktree(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	runGit(t, repo, "branch", "alpha") // plain branch, no worktree
+	chdir(t, repo)
+
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	// order: main (cursor 0), alpha (cursor 1) -> down, mark, D, Enter.
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keyDown, keyRune('c'), keyRune('D'), keyEnter)
+
+	if len(result.Delete) != 1 || result.Delete[0].Branch != "alpha" {
+		t.Fatalf("result.Delete = %+v, want [alpha]", result.Delete)
+	}
+	applyResult(t, result)
+
+	branches := runGit(t, repo, "branch", "--list", "alpha")
+	if strings.TrimSpace(branches) != "" {
+		t.Fatalf("branch alpha still exists after delete: %q", branches)
+	}
+}
+
 func worktreePathForBranch(t *testing.T, repo, branch string) string {
 	t.Helper()
 	out := runGit(t, repo, "worktree", "list", "--porcelain")
