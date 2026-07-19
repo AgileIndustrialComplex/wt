@@ -48,6 +48,10 @@ Run `wt` with no arguments to open the picker:
 wt
 ```
 
+Run the picker from inside a Git repository. If you invoke it elsewhere, `wt`
+points you to `wt init bash|zsh|fish` to install shell integration and then asks
+you to change into a repository.
+
 ```
 Select branch or worktree (j/k, / to filter, c to mark, ? for help)
 > ● main                     (current)         ~/proj
