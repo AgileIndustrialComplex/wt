@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -59,6 +60,9 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 
 	items, err := gitdata.Collect()
 	if err != nil {
+		if errors.Is(err, gitdata.ErrNotAGitRepo) {
+			return fmt.Errorf("%w; run `wt init bash|zsh|fish` to install shell integration, then cd into a repository", err)
+		}
 		return err
 	}
 	top, err := gitdata.Toplevel()

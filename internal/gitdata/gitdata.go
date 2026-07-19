@@ -4,11 +4,16 @@ package gitdata
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+// ErrNotAGitRepo is returned by Collect and Toplevel when the current
+// directory is outside any Git repository.
+var ErrNotAGitRepo = errors.New("not a git repository (or any of the parent directories)")
 
 // Item represents a single row in the picker: a local branch, optionally
 // paired with the worktree it is checked out in.
@@ -63,6 +68,9 @@ func runGit(args ...string) (string, error) {
 		msg := strings.TrimSpace(errBuf.String())
 		if msg == "" {
 			msg = err.Error()
+		}
+		if strings.Contains(msg, "not a git repository") {
+			return "", ErrNotAGitRepo
 		}
 		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
