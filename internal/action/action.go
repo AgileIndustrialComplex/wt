@@ -4,6 +4,7 @@
 package action
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -50,4 +51,19 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// RemoveWorktrees removes each item's worktree via `git worktree remove`,
+// stopping at the first failure so the caller can report which path failed.
+func RemoveWorktrees(items []gitdata.Item) error {
+	return removeWorktreesWith(runGit, items)
+}
+
+func removeWorktreesWith(run runnerFunc, items []gitdata.Item) error {
+	for _, item := range items {
+		if err := run("worktree", "remove", item.Path); err != nil {
+			return fmt.Errorf("removing %s: %w", item.Path, err)
+		}
+	}
+	return nil
 }

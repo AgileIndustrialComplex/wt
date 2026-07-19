@@ -24,14 +24,16 @@ const (
 	modeResolve
 	modeLocked
 	modeHelp
+	modeConfirmRemove
 )
 
 // Result is what the picker produced when the program exited.
 type Result struct {
 	Cancelled       bool
 	Item            gitdata.Item
-	Resolution      string // config.ActionSwitch or config.ActionWorktree, set only when Item has no worktree
-	NewWorktreePath string // suggested path, set only when Resolution == config.ActionWorktree
+	Resolution      string         // config.ActionSwitch or config.ActionWorktree, set only when Item has no worktree
+	NewWorktreePath string         // suggested path, set only when Resolution == config.ActionWorktree
+	RemoveItems     []gitdata.Item // worktrees approved for removal, set only when the user confirmed a removal
 }
 
 // Model is the bubbletea model for the picker.
@@ -47,6 +49,9 @@ type Model struct {
 	defaultAction string
 	keymap        string
 	height        int
+
+	marked        map[int]bool // items marked for batch removal, keyed by index into items
+	pendingRemove []int        // items staged for removal while in modeConfirmRemove
 
 	result   Result
 	quitting bool
@@ -101,6 +106,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateResolve(keyMsg)
 	case modeLocked:
 		return m.updateLocked(keyMsg)
+	case modeConfirmRemove:
+		return m.updateConfirmRemove(keyMsg)
 	default:
 		return m.updateList(keyMsg)
 	}
@@ -117,6 +124,27 @@ func (m Model) updateLocked(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		}
+	}
+	return m, nil
+}
+
+// updateConfirmRemove handles the approval step required before any
+// worktree removal takes effect; pendingRemove is populated by updateList
+// before entering this mode and is never mutated here.
+func (m Model) updateConfirmRemove(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case isCancel(msg), msg.String() == "n":
+		m.mode = modeList
+		m.pendingRemove = nil
+		return m, nil
+	case msg.String() == "y", msg.Type == tea.KeyEnter:
+		items := make([]gitdata.Item, 0, len(m.pendingRemove))
+		for _, idx := range m.pendingRemove {
+			items = append(items, m.items[idx])
+		}
+		m.result = Result{RemoveItems: items}
+		m.quitting = true
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -232,6 +260,41 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 		return m, nil
 
+	case msg.String() == "D":
+		if m.cursor < 0 || m.cursor >= len(m.filtered) {
+			return m, nil
+		}
+		idx := m.filtered[m.cursor]
+		if !m.removable(idx) {
+			return m, nil
+		}
+		if m.marked == nil {
+			m.marked = make(map[int]bool)
+		}
+		if m.marked[idx] {
+			delete(m.marked, idx)
+		} else {
+			m.marked[idx] = true
+		}
+		return m, nil
+
+	case msg.String() == "d":
+		if len(m.marked) > 0 {
+			m.pendingRemove = m.markedIndices()
+			m.mode = modeConfirmRemove
+			return m, nil
+		}
+		if m.cursor < 0 || m.cursor >= len(m.filtered) {
+			return m, nil
+		}
+		idx := m.filtered[m.cursor]
+		if !m.removable(idx) {
+			return m, nil
+		}
+		m.pendingRemove = []int{idx}
+		m.mode = modeConfirmRemove
+		return m, nil
+
 	case msg.Type == tea.KeyEnter:
 		item := m.selected()
 		if item == nil {
@@ -295,6 +358,28 @@ func (m Model) selected() *gitdata.Item {
 	return &m.items[m.filtered[m.cursor]]
 }
 
+// removable reports whether the item at items[idx] is a safe removal
+// candidate: it must have a worktree, and removing it must not pull the rug
+// out from under the running shell (the current worktree) or fail outright
+// (a locked worktree, which git refuses to remove without --force).
+func (m Model) removable(idx int) bool {
+	item := m.items[idx]
+	return item.HasWorktree() && !item.Locked && !item.IsCurrent
+}
+
+// markedIndices returns marked item indices in list order, so removal order
+// (and the confirmation prompt) doesn't depend on the order items were
+// marked in.
+func (m Model) markedIndices() []int {
+	indices := make([]int, 0, len(m.marked))
+	for i := range m.items {
+		if m.marked[i] {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
 // proposeWorktreePath suggests a sibling directory for a new worktree, named
 // after the repository directory plus the branch's last path segment, e.g.
 // branch "feature/login" next to "~/proj" proposes "~/proj-login".
@@ -352,6 +437,7 @@ var (
 	worktreeStyle = colorRenderer.NewStyle().Foreground(lipgloss.Color("4"))            // blue
 	lockedStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("3"))            // yellow
 	filterStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("6")).Bold(true) // cyan
+	markedStyle   = colorRenderer.NewStyle().Bold(true).Foreground(lipgloss.Color("1")) // red
 )
 
 func renderSelected(line string) string {
@@ -386,6 +472,14 @@ func (m Model) View() string {
 			fmt.Fprintf(&b, "Worktree at %s is locked. [Enter] continue  [Esc] cancel\n", item.Path)
 		}
 		return b.String()
+	case modeConfirmRemove:
+		fmt.Fprintf(&b, "Remove %d worktree(s)?\n", len(m.pendingRemove))
+		for _, idx := range m.pendingRemove {
+			item := m.items[idx]
+			fmt.Fprintf(&b, "  %-28s %s\n", item.Branch, item.Path)
+		}
+		b.WriteString("[y] remove  [n/Esc] cancel\n")
+		return b.String()
 	}
 
 	if m.mode == modeFilter {
@@ -395,7 +489,7 @@ func (m Model) View() string {
 		}
 		fmt.Fprintf(&b, "%s%s\n", prompt, m.filter)
 	} else {
-		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, ? for help)\n", m.navigationHint())
+		fmt.Fprintf(&b, "Select branch or worktree (%s, / to filter, d to remove, ? for help)\n", m.navigationHint())
 	}
 
 	start, end := m.visibleRange()
@@ -420,6 +514,10 @@ func (m Model) View() string {
 			if item.Locked {
 				tag = "[worktree, locked]"
 				style = lockedStyle
+			}
+			if m.marked[idx] {
+				tag += " [marked for removal]"
+				style = markedStyle
 			}
 			if i == m.cursor {
 				tagField := fmt.Sprintf("%-20s", tag)
@@ -485,6 +583,8 @@ func (m Model) helpView() string {
 		"  filter     : /  (Esc clears)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
+		"  mark for removal (multi) : D",
+		"  remove worktree          : d  (then y to confirm, n/Esc to cancel)",
 		"  help       : ?",
 		"",
 		"press any key to return",

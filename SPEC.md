@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It never mutates Git state on its own; every write (checkout, `worktree add`) happens only after explicit user confirmation, and only via standard `git` invocations.
+`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`) happens only after explicit user confirmation, and only via standard `git` invocations.
 
 ## 2. Technology Choice
 
@@ -50,13 +50,14 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 │  - plain branch  → git switch <branch>       (in cwd repo)
 │  - worktree path → emit cd path to wrapper   (no git mutation)
 │  - existing path → return it to the shell wrapper
+│  - removal(s)    → git worktree remove <path>, one per approved item
 └──────────────────────┘
 ```
 
 **Data flow:**
 1. `gitdata` runs `git branch --list --format='%(refname:short)'` and `git worktree list --porcelain -z`, parses both, and produces a single normalized list of items, cross-referencing which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
 2. `ui` renders the list, handles keystrokes purely as state transitions (no side effects) until the user confirms.
-3. `action` executes exactly one of: `git switch`, `git worktree add`, or (for worktrees) a directory change — nothing else touches repository state.
+3. `action` executes exactly one of: `git switch`, `git worktree add`, `git worktree remove` (one or more, on explicit approval), or (for worktrees) a directory change — nothing else touches repository state.
 
 **Directory-change trick:** a subprocess cannot change its parent shell's `cwd`. `wt` handles this the same way `zoxide`/`fzf`-based `cd` wrappers do — see §5.
 
@@ -67,7 +68,7 @@ first; the remaining branches follow in Git's original order, then detached
 worktrees in their original order:
 
 ```
-Select branch or worktree (/ to filter, ? for help)
+Select branch or worktree (/ to filter, d to remove, ? for help)
 > ● main                     (current)         ~/proj
   ○ feature/login            [worktree]
   ○ bugfix/api-timeout                          (no worktree)
@@ -76,7 +77,7 @@ Select branch or worktree (/ to filter, ? for help)
 
 - `●` marks the branch/worktree matching the shell's current directory.
 - `[worktree]` tags branches with a dedicated worktree; untagged branches are plain local branches with no worktree.
-- `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks or removes worktrees.
+- `[locked]` reflects `git worktree list --porcelain` locked state; selecting it asks for confirmation before returning its path. `wt` never unlocks worktrees, and locked worktrees cannot be removed via `d`/`D` either.
 - The directory path is shown only for the currently highlighted item; moving the cursor reveals that item's path and hides the previous one.
 
 **Key bindings** (Vim + Emacs + arrows):
@@ -91,12 +92,16 @@ Select branch or worktree (/ to filter, ? for help)
 | Confirm selection | `Enter` |
 | Cancel | `Esc`, `Ctrl-C`, `q` |
 | Help overlay | `?` |
+| Remove highlighted worktree | `d` (then `y`/`Enter` to approve, `n`/`Esc` to cancel) |
+| Toggle worktree into removal set | `D` (navigate and repeat, then `d` to approve the whole set) |
 
 Selecting a plain branch with no worktree and confirming prompts one extra line:
 ```
 'feature/login' has no worktree. [s]witch here  [w]orktree at ../proj-login  [Esc] cancel
 ```
 This directly resolves the stated pain point: instead of `git switch` erroring out, the tool offers the two valid resolutions inline.
+
+Removal is a separate confirm state: pressing `d` (with nothing marked) stages just the highlighted worktree, or (with one or more items marked via `D`) stages the whole marked set; either way it moves into a confirmation screen listing every path about to be removed, and nothing runs until `y`/`Enter` approves it. `D` and the single-item `d` trigger are no-ops on the current worktree (the one `wt` was run from) and on locked worktrees, since removing either would either break the running shell or fail outright.
 
 ## 5. Implementation Details
 

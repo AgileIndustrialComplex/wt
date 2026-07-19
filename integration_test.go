@@ -109,6 +109,44 @@ func applyResult(t *testing.T, result ui.Result) string {
 	}
 }
 
+func TestIntegrationRemoveWorktree(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	wtDir := filepath.Join(t.TempDir(), "zeta-wt-checkout")
+	runGit(t, repo, "worktree", "add", "-b", "zeta-wt", wtDir)
+	chdir(t, repo)
+
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	// order: main (cursor 0, current -> not removable), zeta-wt (cursor 1)
+	// -> one "down", then d to stage removal, then y to approve.
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keyDown, keyRune('d'), keyRune('y'))
+
+	if result.Cancelled {
+		t.Fatal("picker was cancelled, want an approved removal")
+	}
+	if len(result.RemoveItems) != 1 || result.RemoveItems[0].Branch != "zeta-wt" {
+		t.Fatalf("RemoveItems = %+v, want [zeta-wt]", result.RemoveItems)
+	}
+
+	if err := action.RemoveWorktrees(result.RemoveItems); err != nil {
+		t.Fatalf("action.RemoveWorktrees: %v", err)
+	}
+
+	out := runGit(t, repo, "worktree", "list", "--porcelain")
+	if strings.Contains(out, wtDir) {
+		t.Fatalf("worktree %q still listed after removal:\n%s", wtDir, out)
+	}
+}
+
 func TestIntegrationSwitchPlainBranchInPlace(t *testing.T) {
 	repo := t.TempDir()
 	initRepo(t, repo)

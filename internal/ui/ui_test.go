@@ -267,3 +267,95 @@ func TestSelectedStyleResumesAfterNestedStyleReset(t *testing.T) {
 		t.Fatalf("renderSelected() = %q, want %q", got, want)
 	}
 }
+
+func TestLowercaseDOnWorktreeEntersConfirmRemove(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('d')) // cursor -> feature/login
+	if m.mode != modeConfirmRemove {
+		t.Fatalf("mode = %v, want modeConfirmRemove", m.mode)
+	}
+	if m.quitting {
+		t.Fatal("entering confirm-remove mode should not quit the program")
+	}
+	if len(m.pendingRemove) != 1 || m.items[m.pendingRemove[0]].Branch != "feature/login" {
+		t.Fatalf("pendingRemove = %v, want [feature/login]", m.pendingRemove)
+	}
+}
+
+func TestLowercaseDApprovedWithYQuitsWithRemoveItems(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('d'), key('y'))
+	res := m.Result()
+	if !m.quitting || len(res.RemoveItems) != 1 || res.RemoveItems[0].Branch != "feature/login" {
+		t.Fatalf("Result() = %+v, want RemoveItems = [feature/login]", res)
+	}
+}
+
+func TestConfirmRemoveEscCancelsWithoutQuitting(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('d'), keyType(tea.KeyEsc))
+	if m.mode != modeList || m.quitting {
+		t.Fatalf("mode = %v quitting = %v, want modeList and not quitting", m.mode, m.quitting)
+	}
+	if m.pendingRemove != nil {
+		t.Fatalf("pendingRemove = %v, want cleared after cancel", m.pendingRemove)
+	}
+}
+
+func TestDOnCurrentOrLockedItemIsNoOp(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true) // cursor starts on "main", IsCurrent
+	m = send(t, m, key('D'))
+	if len(m.marked) != 0 {
+		t.Fatalf("marked = %v, want empty after D on current worktree", m.marked)
+	}
+	m = send(t, m, key('d'))
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want modeList (d on current worktree should be a no-op)", m.mode)
+	}
+
+	m2 := New(testItems(), "/repo/proj", "", true)
+	m2 = send(t, m2, key('G'), key('D')) // cursor -> release/2.1, Locked
+	if len(m2.marked) != 0 {
+		t.Fatalf("marked = %v, want empty after D on locked worktree", m2.marked)
+	}
+}
+
+func TestCapitalDMarksMultipleForBatchRemoval(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	// mark feature/login (index 1), then toggle it back off, then mark it again.
+	m = send(t, m, key('j'), key('D'))
+	if len(m.marked) != 1 {
+		t.Fatalf("marked = %v, want 1 item marked", m.marked)
+	}
+	m = send(t, m, key('D')) // toggle off
+	if len(m.marked) != 0 {
+		t.Fatalf("marked = %v, want 0 items after toggling off", m.marked)
+	}
+	m = send(t, m, key('D')) // toggle back on
+	if len(m.marked) != 1 {
+		t.Fatalf("marked = %v, want 1 item marked again", m.marked)
+	}
+
+	m = send(t, m, key('d')) // approve the marked set
+	if m.mode != modeConfirmRemove {
+		t.Fatalf("mode = %v, want modeConfirmRemove", m.mode)
+	}
+	if len(m.pendingRemove) != 1 || m.items[m.pendingRemove[0]].Branch != "feature/login" {
+		t.Fatalf("pendingRemove = %v, want [feature/login]", m.pendingRemove)
+	}
+
+	m = send(t, m, keyType(tea.KeyEnter)) // Enter also approves
+	res := m.Result()
+	if !m.quitting || len(res.RemoveItems) != 1 || res.RemoveItems[0].Branch != "feature/login" {
+		t.Fatalf("Result() = %+v, want RemoveItems = [feature/login]", res)
+	}
+}
+
+func TestMarkedItemShowsInView(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('D'))
+	view := m.View()
+	if !strings.Contains(view, "[marked for removal]") {
+		t.Fatalf("View() does not show marked indicator:\n%s", view)
+	}
+}

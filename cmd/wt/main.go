@@ -80,6 +80,16 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 		return nil
 	}
 
+	if len(result.RemoveItems) > 0 {
+		if err := action.RemoveWorktrees(result.RemoveItems); err != nil {
+			return err
+		}
+		for _, item := range result.RemoveItems {
+			fmt.Fprintf(os.Stderr, "wt: removed worktree %s\n", item.Path)
+		}
+		return nil
+	}
+
 	dest, err := applyResult(result)
 	if err != nil {
 		return err

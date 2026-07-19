@@ -47,7 +47,7 @@ wt
 ```
 
 ```
-Select branch or worktree (/ to filter, ? for help)
+Select branch or worktree (/ to filter, d to remove, ? for help)
 > ● main                     (current)         ~/proj
   ○ feature/login            [worktree]
   ○ bugfix/api-timeout                          (no worktree)
@@ -63,6 +63,22 @@ Selecting a worktree changes your shell's directory to it. Selecting a plain bra
 ```
 'feature/login' has no worktree. [s]witch here  [w]orktree at ../proj-login  [Esc] cancel
 ```
+
+### Removing worktrees
+
+Highlight a worktree and press `d` to remove it. A confirmation prompt lists what will be removed and requires explicit approval before anything happens:
+
+```
+Remove 1 worktree(s)?
+  feature/login                /repo/proj-login
+[y] remove  [n/Esc] cancel
+```
+
+Press `y` (or `Enter`) to approve, or `n`/`Esc` to cancel without changing anything.
+
+To remove several worktrees at once, navigate between them and press `D` (Shift-D) to toggle each one into a removal set — marked rows are shown highlighted with a `[marked for removal]` tag — then press `d` to bring up the same confirmation prompt for the whole set.
+
+The current worktree and locked worktrees can't be marked or removed this way, so pressing `d`/`D` on them is a no-op; unlock or `cd` elsewhere first if you need to remove one of those.
 
 Other flags:
 

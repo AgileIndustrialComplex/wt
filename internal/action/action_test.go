@@ -71,3 +71,40 @@ func TestNewWorktreeWithRunsGitWorktreeAdd(t *testing.T) {
 		t.Fatalf("git calls = %v, want %v", *calls, want)
 	}
 }
+
+func TestRemoveWorktreesWithRunsGitWorktreeRemoveForEach(t *testing.T) {
+	run, calls := recordingRunner()
+	items := []gitdata.Item{
+		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "bugfix/api-timeout", Path: "/repo/proj-api-timeout"},
+	}
+	if err := removeWorktreesWith(run, items); err != nil {
+		t.Fatalf("removeWorktreesWith() error = %v", err)
+	}
+	want := [][]string{
+		{"worktree", "remove", "/repo/proj-login"},
+		{"worktree", "remove", "/repo/proj-api-timeout"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestRemoveWorktreesWithStopsAtFirstError(t *testing.T) {
+	var calls [][]string
+	run := func(args ...string) error {
+		calls = append(calls, append([]string{}, args...))
+		return fmt.Errorf("boom")
+	}
+	items := []gitdata.Item{
+		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "bugfix/api-timeout", Path: "/repo/proj-api-timeout"},
+	}
+	err := removeWorktreesWith(run, items)
+	if err == nil {
+		t.Fatal("removeWorktreesWith() error = nil, want error propagated from git")
+	}
+	if len(calls) != 1 {
+		t.Fatalf("git calls = %v, want exactly one call before stopping", calls)
+	}
+}
