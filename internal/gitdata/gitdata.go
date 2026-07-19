@@ -24,6 +24,7 @@ type Item struct {
 	IsCurrent bool
 	Locked    bool
 	Detached  bool
+	Unmerged  bool // true if the branch is not fully merged into HEAD (git branch -d would refuse it)
 }
 
 // HasWorktree reports whether the branch is checked out anywhere.
@@ -99,6 +100,15 @@ func collect(run runnerFunc) ([]Item, error) {
 	}
 	branches := parseLines(brOut)
 
+	mergedOut, err := run("branch", "--format=%(refname:short)", "--merged")
+	if err != nil {
+		return nil, err
+	}
+	merged := make(map[string]bool, len(branches))
+	for _, b := range parseLines(mergedOut) {
+		merged[b] = true
+	}
+
 	top, err := toplevel(run)
 	if err != nil {
 		return nil, err
@@ -106,7 +116,7 @@ func collect(run runnerFunc) ([]Item, error) {
 
 	items := make([]Item, 0, len(branches)+len(worktrees))
 	for _, b := range branches {
-		item := Item{Branch: b}
+		item := Item{Branch: b, Unmerged: !merged[b]}
 		if w, ok := byBranch[b]; ok {
 			item.Path = w.path
 			item.Locked = w.locked

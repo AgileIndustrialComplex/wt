@@ -25,7 +25,14 @@ const (
 	modeLocked
 	modeHelp
 	modeConfirmDelete
+	modeConfirmForceDelete
 )
+
+// ForceDeleteConfirmPhrase is the exact text a user must type to delete a
+// branch with unmerged changes. It must match verbatim (case-sensitive,
+// including punctuation) — this is deliberate friction against losing
+// unmerged work, so it is never abbreviated or made configurable.
+const ForceDeleteConfirmPhrase = "Yes, I want to remove the branch that has changes that have been unmerged."
 
 // Result is what the picker produced when the program exited.
 type Result struct {
@@ -50,6 +57,8 @@ type Model struct {
 	defaultAction string
 	keymap        string
 	height        int
+
+	forceConfirmInput string // typed phrase in modeConfirmForceDelete
 
 	result   Result
 	quitting bool
@@ -107,26 +116,79 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateLocked(keyMsg)
 	case modeConfirmDelete:
 		return m.updateConfirmDelete(keyMsg)
+	case modeConfirmForceDelete:
+		return m.updateConfirmForceDelete(keyMsg)
 	default:
 		return m.updateList(keyMsg)
 	}
 }
 
 // updateConfirmDelete handles the approval step shown after pressing D with
-// at least one branch marked. Enter confirms and quits with the marked
-// items in Result.Delete; any cancel key stops the operation and returns to
-// the list without quitting the picker.
+// at least one branch marked. Enter confirms: if any marked branch is
+// unmerged, it advances to modeConfirmForceDelete for an explicit
+// phrase-typed confirmation instead of quitting immediately. Any cancel key
+// stops the operation and returns to the list without quitting the picker.
 func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if isCancel(msg) {
 		m.mode = modeList
 		return m, nil
 	}
 	if msg.Type == tea.KeyEnter {
-		m.result = Result{Delete: m.Marked()}
+		marked := m.Marked()
+		if hasUnmergedBranch(marked) {
+			m.forceConfirmInput = ""
+			m.mode = modeConfirmForceDelete
+			return m, nil
+		}
+		m.result = Result{Delete: marked}
 		m.quitting = true
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// updateConfirmForceDelete handles the phrase-typed approval step shown
+// when at least one marked branch has unmerged changes. Esc/Ctrl-C cancel
+// back to the list; Enter only confirms and quits (with the full marked set
+// in Result.Delete) when the typed text matches ForceDeleteConfirmPhrase
+// exactly, otherwise it is a no-op so the user can keep correcting the
+// input. "q" is not treated as cancel here since it is valid input text.
+func (m Model) updateConfirmForceDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.forceConfirmInput = ""
+		m.mode = modeList
+		return m, nil
+	case tea.KeyEnter:
+		if m.forceConfirmInput == ForceDeleteConfirmPhrase {
+			m.result = Result{Delete: m.Marked()}
+			m.quitting = true
+			return m, tea.Quit
+		}
+		return m, nil
+	case tea.KeyBackspace:
+		if len(m.forceConfirmInput) > 0 {
+			r := []rune(m.forceConfirmInput)
+			m.forceConfirmInput = string(r[:len(r)-1])
+		}
+		return m, nil
+	case tea.KeyRunes:
+		m.forceConfirmInput += string(msg.Runes)
+		return m, nil
+	}
+	return m, nil
+}
+
+// hasUnmergedBranch reports whether any item has unmerged changes on its
+// branch. Detached-HEAD entries have no associated branch to delete, so
+// they are excluded regardless of their zero-value Unmerged field.
+func hasUnmergedBranch(items []gitdata.Item) bool {
+	for _, item := range items {
+		if item.Unmerged && !item.Detached {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) updateLocked(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -460,6 +522,17 @@ func (m Model) View() string {
 		}
 		b.WriteString("[Enter] confirm  [Esc] cancel\n")
 		return b.String()
+	case modeConfirmForceDelete:
+		b.WriteString("The following branch(es) have unmerged changes and will be permanently lost:\n")
+		for _, item := range m.Marked() {
+			if item.Unmerged && !item.Detached {
+				fmt.Fprintf(&b, "  %s\n", item.Branch)
+			}
+		}
+		b.WriteString("Type the phrase below exactly and press Enter to proceed, or Esc to cancel:\n\n")
+		fmt.Fprintf(&b, "  %s\n\n", ForceDeleteConfirmPhrase)
+		fmt.Fprintf(&b, "> %s\n", m.forceConfirmInput)
+		return b.String()
 	}
 
 	if m.mode == modeFilter {
@@ -575,7 +648,7 @@ func (m Model) helpView() string {
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
 		"  mark       : c  (selection)",
-		"  delete     : D  (marked branches, asks to confirm)",
+		"  delete     : D  (marked branches, asks to confirm; unmerged branches require typing a phrase)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",
