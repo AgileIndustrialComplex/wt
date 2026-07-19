@@ -48,17 +48,17 @@ wt
 
 ```
 Select branch or worktree (/ to filter, ? for help)
-> [ ] ● main                     (current)         ~/proj
-  [ ] ○ feature/login            [worktree]
-      ○ bugfix/api-timeout                          (no worktree)
-  [x] ○ release/2.1              [worktree, locked]
+> ● main                     (current)         ~/proj
+  ○ feature/login            [worktree]
+  ○ bugfix/api-timeout                          (no worktree)
+  ○ release/2.1              [worktree, locked]
 ```
 
 Navigate with the arrow keys, `j`/`k`, or `Ctrl-N`/`Ctrl-P`. Jump to the top or bottom with `g`/`G`, page with `Ctrl-D`/`Ctrl-U`, and filter the list by typing `/` followed by a search term. Press `Enter` to confirm, or `Esc`/`Ctrl-C`/`q` to cancel.
 
-Highlight a worktree and press `c` to toggle a `[x]`/`[ ]` checkbox on it; the checked state sticks as you move the cursor around or filter. Branches with no worktree can't be checked. This is currently just a UI marker — no bulk action reads it yet.
+Highlight a worktree and press `m` to mark or unmark it. After the first mark, a `[x]`/`[ ]` marker column appears and remains visible until the last mark is removed. Marked state persists as you move the cursor or filter, while branches with no worktree cannot be marked. This is currently just a persistent UI marker — no action reads it yet.
 
-The picker uses color to distinguish the selected row, current worktree, checked boxes, worktree tags, locked worktrees, and filter prompt. Pass `--no-color` to disable all ANSI styling.
+The picker uses color to distinguish the selected row, current worktree, marked items, worktree tags, locked worktrees, and filter prompt. Pass `--no-color` to disable all ANSI styling.
 
 Selecting a worktree changes your shell's directory to it. Selecting a plain branch with no worktree prompts you to either switch to it in place or create a new worktree for it:
 

@@ -185,73 +185,79 @@ func TestCancelKeysQuitWithCancelled(t *testing.T) {
 	}
 }
 
-func TestCheckTogglesWorktreeItem(t *testing.T) {
+func TestMarkTogglesWorktreeItem(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true) // cursor starts on "main", which has a worktree
-	m = send(t, m, key('c'))
+	m = send(t, m, key('m'))
 	if m.quitting {
-		t.Fatal("checking an item should not quit the program")
+		t.Fatal("marking an item should not quit the program")
 	}
-	checked := m.Checked()
-	if len(checked) != 1 || checked[0].Branch != "main" {
-		t.Fatalf("Checked() = %+v, want [main]", checked)
+	marked := m.Marked()
+	if len(marked) != 1 || marked[0].Branch != "main" {
+		t.Fatalf("Marked() = %+v, want [main]", marked)
 	}
 
-	m = send(t, m, key('c'))
-	if len(m.Checked()) != 0 {
-		t.Fatalf("Checked() after second toggle = %+v, want empty", m.Checked())
+	m = send(t, m, key('m'))
+	if len(m.Marked()) != 0 {
+		t.Fatalf("Marked() after second toggle = %+v, want empty", m.Marked())
 	}
 }
 
-func TestCheckIgnoredOnItemWithoutWorktree(t *testing.T) {
+func TestMarkIgnoredOnItemWithoutWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('j'), key('j'), key('c')) // -> bugfix/api-timeout, no worktree
-	if len(m.Checked()) != 0 {
-		t.Fatalf("Checked() = %+v, want empty for item without a worktree", m.Checked())
+	m = send(t, m, key('j'), key('j'), key('m')) // -> bugfix/api-timeout, no worktree
+	if len(m.Marked()) != 0 {
+		t.Fatalf("Marked() = %+v, want empty for item without a worktree", m.Marked())
 	}
 }
 
-func TestCheckedItemsPersistAcrossCursorMovement(t *testing.T) {
+func TestMarkedItemsPersistAcrossCursorMovement(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('c'), key('j'), key('j'), key('j'), key('c')) // check main, check release/2.1
-	checked := m.Checked()
-	if len(checked) != 2 || checked[0].Branch != "main" || checked[1].Branch != "release/2.1" {
-		t.Fatalf("Checked() = %+v, want [main, release/2.1]", checked)
+	m = send(t, m, key('m'), key('j'), key('j'), key('j'), key('m')) // mark main, mark release/2.1
+	marked := m.Marked()
+	if len(marked) != 2 || marked[0].Branch != "main" || marked[1].Branch != "release/2.1" {
+		t.Fatalf("Marked() = %+v, want [main, release/2.1]", marked)
 	}
 }
 
-func TestCheckedItemsPersistAcrossFiltering(t *testing.T) {
+func TestMarkedItemsPersistAcrossFiltering(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
-	m = send(t, m, key('c')) // check main
+	m = send(t, m, key('m')) // mark main
 	m = send(t, m, key('/'), key('r'), key('e'), key('l'), keyType(tea.KeyEnter))
 	if len(m.filtered) != 1 || m.items[m.filtered[0]].Branch != "release/2.1" {
 		t.Fatalf("filtered items = %v, want release/2.1", m.filtered)
 	}
-	m = send(t, m, key('c')) // check release/2.1 while main is filtered out
+	m = send(t, m, key('m')) // mark release/2.1 while main is filtered out
 	m = send(t, m, key('/'), keyType(tea.KeyEsc))
-	checked := m.Checked()
-	if len(checked) != 2 || checked[0].Branch != "main" || checked[1].Branch != "release/2.1" {
-		t.Fatalf("Checked() after filtering = %+v, want [main, release/2.1]", checked)
+	marked := m.Marked()
+	if len(marked) != 2 || marked[0].Branch != "main" || marked[1].Branch != "release/2.1" {
+		t.Fatalf("Marked() after filtering = %+v, want [main, release/2.1]", marked)
 	}
 }
 
-func TestViewShowsCheckboxState(t *testing.T) {
+func TestViewShowsMarkColumnOnlyWhileItemsAreMarked(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	view := m.View()
-	if !strings.Contains(view, "[ ] ● main") {
-		t.Fatalf("View() missing unchecked box for main:\n%s", view)
+	if strings.Contains(view, "[ ]") || strings.Contains(view, "[x]") {
+		t.Fatalf("View() shows mark column before an item is marked:\n%s", view)
 	}
 
-	m = send(t, m, key('c'))
+	m = send(t, m, key('m'))
 	view = m.View()
 	if !strings.Contains(view, "[x] ● main") {
-		t.Fatalf("View() missing checked box for main:\n%s", view)
+		t.Fatalf("View() missing marker for main:\n%s", view)
 	}
 
 	m = send(t, m, key('j'), key('j')) // bugfix/api-timeout, no worktree
 	view = m.View()
 	line := lineContaining(view, "bugfix/api-timeout")
 	if strings.Contains(line, "[") {
-		t.Fatalf("View() should render no checkbox for item without a worktree:\n%s", line)
+		t.Fatalf("View() should render no marker for item without a worktree:\n%s", line)
+	}
+
+	m = send(t, m, key('k'), key('k'), key('m'))
+	view = m.View()
+	if strings.Contains(view, "[ ]") || strings.Contains(view, "[x]") {
+		t.Fatalf("View() shows mark column after the final mark is removed:\n%s", view)
 	}
 }
 
@@ -278,11 +284,11 @@ func TestHelpOverlayReturnsToList(t *testing.T) {
 	}
 }
 
-func TestHelpOverlayDocumentsCheckBinding(t *testing.T) {
+func TestHelpOverlayDocumentsMarkBindingAndSemantics(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
-	if view := m.View(); !strings.Contains(view, "check      : c  (worktrees only)") {
-		t.Fatalf("help overlay missing check binding:\n%s", view)
+	if view := m.View(); !strings.Contains(view, "mark       : m  (worktrees only; persistent marker, no action yet)") {
+		t.Fatalf("help overlay missing mark semantics:\n%s", view)
 	}
 }
 

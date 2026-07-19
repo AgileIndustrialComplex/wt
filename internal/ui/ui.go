@@ -39,7 +39,7 @@ type Model struct {
 	items         []gitdata.Item
 	filtered      []int
 	cursor        int
-	checked       map[int]bool // keyed by index into items, worktree items only
+	marked        map[int]bool // keyed by index into items, worktree items only
 	filter        string
 	mode          mode
 	toplevel      string
@@ -64,7 +64,7 @@ func New(items []gitdata.Item, toplevel string, worktreeRoot string, noColor boo
 func NewConfigured(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool, defaultAction, keymap string) Model {
 	m := Model{
 		items:         items,
-		checked:       make(map[int]bool),
+		marked:        make(map[int]bool),
 		toplevel:      toplevel,
 		worktreeRoot:  worktreeRoot,
 		noColor:       noColor,
@@ -234,8 +234,8 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 		return m, nil
 
-	case msg.String() == "c":
-		m.toggleChecked()
+	case msg.String() == "m":
+		m.toggleMarked()
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
@@ -301,10 +301,10 @@ func (m Model) selected() *gitdata.Item {
 	return &m.items[m.filtered[m.cursor]]
 }
 
-// toggleChecked flips the checked state of the highlighted item. Only items
-// with a worktree can be checked, since checking exists to mark worktrees
+// toggleMarked flips the marked state of the highlighted item. Only items
+// with a worktree can be marked, since marking exists to identify worktrees
 // for a future bulk action.
-func (m *Model) toggleChecked() {
+func (m *Model) toggleMarked() {
 	if m.cursor < 0 || m.cursor >= len(m.filtered) {
 		return
 	}
@@ -312,17 +312,17 @@ func (m *Model) toggleChecked() {
 	if !m.items[idx].HasWorktree() {
 		return
 	}
-	m.checked[idx] = !m.checked[idx]
-	if !m.checked[idx] {
-		delete(m.checked, idx)
+	m.marked[idx] = !m.marked[idx]
+	if !m.marked[idx] {
+		delete(m.marked, idx)
 	}
 }
 
-// Checked returns the items currently marked, in list order.
-func (m Model) Checked() []gitdata.Item {
+// Marked returns the marked items in list order.
+func (m Model) Marked() []gitdata.Item {
 	var result []gitdata.Item
 	for i, item := range m.items {
-		if m.checked[i] {
+		if m.marked[i] {
 			result = append(result, item)
 		}
 	}
@@ -386,7 +386,7 @@ var (
 	worktreeStyle = colorRenderer.NewStyle().Foreground(lipgloss.Color("4"))            // blue
 	lockedStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("3"))            // yellow
 	filterStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("6")).Bold(true) // cyan
-	checkedStyle  = colorRenderer.NewStyle().Foreground(lipgloss.Color("5")).Bold(true) // magenta
+	markedStyle   = colorRenderer.NewStyle().Foreground(lipgloss.Color("5")).Bold(true) // magenta
 )
 
 func renderSelected(line string) string {
@@ -448,17 +448,20 @@ func (m Model) View() string {
 				mark = currentStyle.Render(mark)
 			}
 		}
-		checkbox := "   "
+		marker := "   "
 		if item.HasWorktree() {
-			checkbox = "[ ]"
-			if m.checked[idx] {
-				checkbox = "[x]"
+			marker = "[ ]"
+			if m.marked[idx] {
+				marker = "[x]"
 				if !m.noColor {
-					checkbox = checkedStyle.Render(checkbox)
+					marker = markedStyle.Render(marker)
 				}
 			}
 		}
-		line := fmt.Sprintf("%s %s %s %-28s", cursor, checkbox, mark, item.Branch)
+		line := fmt.Sprintf("%s %s %-28s", cursor, mark, item.Branch)
+		if len(m.marked) > 0 {
+			line = fmt.Sprintf("%s %s %s %-28s", cursor, marker, mark, item.Branch)
+		}
 		if item.HasWorktree() {
 			tag := "[worktree]"
 			style := worktreeStyle
@@ -528,7 +531,7 @@ func (m Model) helpView() string {
 		"  page up    : Ctrl-U",
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
-		"  check      : c  (worktrees only)",
+		"  mark       : m  (worktrees only; persistent marker, no action yet)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",
