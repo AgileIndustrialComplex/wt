@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [essa]
+    tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [essa]
 
 permissions:
   contents: read
@@ -36,7 +37,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.1.6
 
   # --- Build -------------------------------------------------------------------
   build:
