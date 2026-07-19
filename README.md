@@ -16,28 +16,22 @@ That workflow multiplies the exact pain `wt` was built to remove. When you are j
 
 ## Installation
 
-Prebuilt binaries are published on GitHub Releases for Linux, macOS, and Windows.
-
-Homebrew (macOS and Linux):
+Install from source with Go 1.24.2 or newer:
 
 ```bash
-brew install <tap>/wt
+go install github.com/AgileIndustrialComplex/wt/cmd/wt@latest
 ```
 
-Scoop (Windows):
-
-```powershell
-scoop bucket add <bucket>
-scoop install wt
-```
-
-Manual install: download the archive for your platform from the Releases page, extract it, and place the `wt` binary on your `PATH`.
+From a local checkout, run `make build` to produce `./wt`.
 
 After installing the binary, enable shell integration so `wt` can change your shell's working directory (a subprocess cannot `cd` its parent shell on its own):
 
 ```bash
-# bash / zsh
-wt init bash >> ~/.bashrc     # or ~/.zshrc, using the zsh variant
+# bash
+wt init bash >> ~/.bashrc
+
+# zsh
+wt init zsh >> ~/.zshrc
 ```
 
 ```fish
@@ -71,7 +65,7 @@ Selecting a worktree changes your shell's directory to it. Selecting a plain bra
 Other flags:
 
 ```bash
-wt --path-only          # print the chosen path or branch name, no cd (for scripting)
+wt --path-only          # print a selected worktree path for shell integration
 wt --worktree-root DIR  # base directory to propose for new worktrees
 wt --no-color
 wt --version
@@ -99,7 +93,3 @@ This design is what makes `wt` a natural fit alongside Claude Code's multi-worke
 ## Contributing
 
 Contributions are welcome via issues and pull requests.
-
-## License
-
-MIT
