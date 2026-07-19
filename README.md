@@ -2,6 +2,8 @@
 
 An interactive, keyboard-driven CLI for switching between Git branches and worktrees, built as a companion for developers running parallel Claude Code sessions.
 
+![wt](https://github.com/user-attachments/assets/3e2d2b0b-af42-42f6-ae70-cd190c6a4cb6)
+
 ## Overview
 
 `wt` merges the output of `git branch` and `git worktree list` into a single, navigable picker. Instead of running two separate commands and manually resolving which branch lives in which checkout, you get one list, keyboard navigation, and a single confirmation step that either checks out a branch in place or jumps you into an existing worktree.
