@@ -219,6 +219,21 @@ func TestCheckedItemsPersistAcrossCursorMovement(t *testing.T) {
 	}
 }
 
+func TestCheckedItemsPersistAcrossFiltering(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('c')) // check main
+	m = send(t, m, key('/'), key('r'), key('e'), key('l'), keyType(tea.KeyEnter))
+	if len(m.filtered) != 1 || m.items[m.filtered[0]].Branch != "release/2.1" {
+		t.Fatalf("filtered items = %v, want release/2.1", m.filtered)
+	}
+	m = send(t, m, key('c')) // check release/2.1 while main is filtered out
+	m = send(t, m, key('/'), keyType(tea.KeyEsc))
+	checked := m.Checked()
+	if len(checked) != 2 || checked[0].Branch != "main" || checked[1].Branch != "release/2.1" {
+		t.Fatalf("Checked() after filtering = %+v, want [main, release/2.1]", checked)
+	}
+}
+
 func TestViewShowsCheckboxState(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	view := m.View()
@@ -260,6 +275,14 @@ func TestHelpOverlayReturnsToList(t *testing.T) {
 	m = send(t, m, key('x'))
 	if m.mode != modeList {
 		t.Fatalf("mode after key in help = %v, want modeList", m.mode)
+	}
+}
+
+func TestHelpOverlayDocumentsCheckBinding(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('?'))
+	if view := m.View(); !strings.Contains(view, "check      : c  (worktrees only)") {
+		t.Fatalf("help overlay missing check binding:\n%s", view)
 	}
 }
 
