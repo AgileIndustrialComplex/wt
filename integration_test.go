@@ -199,7 +199,7 @@ func TestIntegrationCreateWorktreeForBranch(t *testing.T) {
 	}
 
 	want := worktreePathForBranch(t, repo, "alpha")
-	if dest != want {
+	if filepath.Clean(dest) != filepath.Clean(want) {
 		t.Fatalf("dest = %q, want %q (matches git worktree list)", dest, want)
 	}
 }

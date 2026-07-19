@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -156,7 +157,7 @@ func TestResolveNewWorktreeProposesSiblingPath(t *testing.T) {
 	if res.Resolution != config.ActionWorktree {
 		t.Fatalf("Resolution = %v, want ActionWorktree", res.Resolution)
 	}
-	want := "/repo/proj-api-timeout"
+	want := filepath.Join(string(filepath.Separator), "repo", "proj-api-timeout")
 	if res.NewWorktreePath != want {
 		t.Fatalf("NewWorktreePath = %q, want %q", res.NewWorktreePath, want)
 	}
