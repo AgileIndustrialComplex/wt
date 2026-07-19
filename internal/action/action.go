@@ -70,6 +70,10 @@ func deleteWorktreesWith(run runnerFunc, items []gitdata.Item) error {
 			errs = append(errs, fmt.Errorf("%s: cannot delete the current worktree", item.Branch))
 			continue
 		}
+		if item.Locked {
+			errs = append(errs, fmt.Errorf("%s: cannot delete a locked worktree", item.Branch))
+			continue
+		}
 		if err := run("worktree", "remove", item.Path); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
 			continue

@@ -218,8 +218,18 @@ func TestMarkIgnoredOnCurrentWorktree(t *testing.T) {
 	}
 }
 
-func TestMarkedItemsPersistAcrossCursorMovement(t *testing.T) {
+func TestMarkIgnoredOnLockedWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('G'), key('m'))
+	if len(m.Marked()) != 0 {
+		t.Fatalf("Marked() = %+v, want empty for locked worktree", m.Marked())
+	}
+}
+
+func TestMarkedItemsPersistAcrossCursorMovement(t *testing.T) {
+	items := testItems()
+	items[3].Locked = false
+	m := New(items, "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('m'), key('j'), key('j'), key('m')) // mark feature/login, mark release/2.1
 	marked := m.Marked()
 	if len(marked) != 2 || marked[0].Branch != "feature/login" || marked[1].Branch != "release/2.1" {
@@ -228,7 +238,9 @@ func TestMarkedItemsPersistAcrossCursorMovement(t *testing.T) {
 }
 
 func TestMarkedItemsPersistAcrossFiltering(t *testing.T) {
-	m := New(testItems(), "/repo/proj", "", true)
+	items := testItems()
+	items[3].Locked = false
+	m := New(items, "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('m')) // mark feature/login
 	m = send(t, m, key('/'), key('r'), key('e'), key('l'), keyType(tea.KeyEnter))
 	if len(m.filtered) != 1 || m.items[m.filtered[0]].Branch != "release/2.1" {
@@ -297,7 +309,9 @@ func TestDKeyOpensConfirmWhenItemsMarked(t *testing.T) {
 }
 
 func TestConfirmDeleteEnterQuitsWithMarkedItems(t *testing.T) {
-	m := New(testItems(), "/repo/proj", "", true)
+	items := testItems()
+	items[3].Locked = false
+	m := New(items, "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('m'), key('j'), key('j'), key('m'), key('D'), keyType(tea.KeyEnter))
 	if !m.quitting {
 		t.Fatal("Enter in modeConfirmDelete should quit the program")
@@ -338,7 +352,9 @@ func TestViewShowsDeleteHintOnlyWhenMarked(t *testing.T) {
 }
 
 func TestConfirmDeleteViewListsMarkedBranches(t *testing.T) {
-	m := New(testItems(), "/repo/proj", "", true)
+	items := testItems()
+	items[3].Locked = false
+	m := New(items, "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('m'), key('j'), key('j'), key('m'), key('D'))
 	view := m.View()
 	if !strings.Contains(view, "Delete 2 worktree(s)") {

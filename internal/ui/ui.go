@@ -336,7 +336,7 @@ func (m *Model) toggleMarked() {
 		return
 	}
 	idx := m.filtered[m.cursor]
-	if !m.items[idx].HasWorktree() || m.items[idx].IsCurrent {
+	if !m.items[idx].HasWorktree() || m.items[idx].IsCurrent || m.items[idx].Locked {
 		return
 	}
 	m.marked[idx] = !m.marked[idx]
