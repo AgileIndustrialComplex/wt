@@ -79,6 +79,19 @@ func TestDeleteWorktreesWithRemovesWorktreeThenDeletesBranch(t *testing.T) {
 	}
 }
 
+func TestDeleteWorktreesWithBranchWithoutWorktreeSkipsWorktreeRemove(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "bugfix/api-timeout"}
+
+	if err := deleteWorktreesWith(run, []gitdata.Item{item}); err != nil {
+		t.Fatalf("deleteWorktreesWith() error = %v", err)
+	}
+	want := [][]string{{"branch", "-d", "bugfix/api-timeout"}}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
 func TestDeleteWorktreesWithSkipsBranchDeleteOnWorktreeRemoveFailure(t *testing.T) {
 	run := func(args ...string) error {
 		if args[0] == "worktree" {

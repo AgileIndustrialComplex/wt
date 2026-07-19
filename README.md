@@ -62,9 +62,9 @@ Select branch or worktree (j/k, / to filter, c to mark, ? for help)
 
 Navigate with the arrow keys, `j`/`k`, or `Ctrl-N`/`Ctrl-P`. Jump to the top or bottom with `g`/`G`, page with `Ctrl-D`/`Ctrl-U`, and filter the list by typing `/` followed by a search term. Press `Enter` to confirm, or `Esc`/`Ctrl-C`/`q` to cancel.
 
-Highlight a worktree and press `c` to mark or unmark it as part of the selection. After the first mark, a `[x]`/`[ ]` marker column appears and remains visible until the last mark is removed. Marked state persists as you move the cursor or filter. Plain branches, the current worktree, and locked worktrees cannot be marked.
+Highlight a branch or worktree and press `c` to mark or unmark it as part of the selection. After the first mark, a `[x]`/`[ ]` marker column appears and remains visible until the last mark is removed. Marked state persists as you move the cursor or filter. The current worktree and locked worktrees cannot be marked.
 
-Once at least one item is marked, a hint line appears below the list telling you which key acts on the marked set. Press `D` to delete every marked worktree: a confirmation screen lists the branches and paths about to be removed, `Enter` runs the deletion (`git worktree remove` then `git branch -d` for each), and any cancel key (`Esc`, `Ctrl-C`, `q`) backs out without touching Git state or losing your marked selection.
+Once at least one item is marked, a hint line appears below the list telling you which key acts on the marked set. Press `D` to delete every marked branch: a confirmation screen lists the branches (and worktree paths, where applicable) about to be removed, `Enter` runs the deletion (`git worktree remove` for items with a worktree, then `git branch -d` for each), and any cancel key (`Esc`, `Ctrl-C`, `q`) backs out without touching Git state or losing your marked selection.
 
 The picker uses color to distinguish the selected row, current worktree, marked items, worktree tags, locked worktrees, and filter prompt. Pass `--no-color` to disable all ANSI styling.
 

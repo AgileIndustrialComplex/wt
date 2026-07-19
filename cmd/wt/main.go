@@ -103,8 +103,8 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 	return nil
 }
 
-// applyDelete removes each marked worktree and its branch, reporting
-// success to stderr on completion. It returns any error(s) action.
+// applyDelete removes each marked branch (and its worktree, if it has one),
+// reporting success to stderr on completion. It returns any error(s) action.
 // DeleteWorktrees encountered so main exits non-zero, but every item is
 // still attempted regardless of earlier failures.
 func applyDelete(items []gitdata.Item) error {
@@ -112,7 +112,7 @@ func applyDelete(items []gitdata.Item) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "wt: deleted %d worktree(s)\n", len(items))
+	fmt.Fprintf(os.Stderr, "wt: deleted %d branch(es)\n", len(items))
 	return nil
 }
 

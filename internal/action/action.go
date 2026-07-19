@@ -54,11 +54,12 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 	return path, nil
 }
 
-// DeleteWorktrees removes each item's worktree via `git worktree remove`,
-// then deletes the now-unattached branch via `git branch -d` (non-force: a
-// branch with unmerged commits is left in place and reported as an error).
-// Every item is attempted even if earlier ones fail; all failures are
-// combined into a single returned error.
+// DeleteWorktrees removes each item's worktree, if it has one, via
+// `git worktree remove`, then deletes the branch via `git branch -d`
+// (non-force: a branch with unmerged commits is left in place and reported
+// as an error). Items without a worktree skip straight to the branch
+// delete. Every item is attempted even if earlier ones fail; all failures
+// are combined into a single returned error.
 func DeleteWorktrees(items []gitdata.Item) error {
 	return deleteWorktreesWith(runGit, items)
 }
@@ -74,9 +75,11 @@ func deleteWorktreesWith(run runnerFunc, items []gitdata.Item) error {
 			errs = append(errs, fmt.Errorf("%s: cannot delete a locked worktree", item.Branch))
 			continue
 		}
-		if err := run("worktree", "remove", item.Path); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
-			continue
+		if item.HasWorktree() {
+			if err := run("worktree", "remove", item.Path); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
+				continue
+			}
 		}
 		if item.Detached {
 			continue
