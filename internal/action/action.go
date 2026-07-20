@@ -56,10 +56,12 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 
 // DeleteWorktrees removes each item's worktree, if it has one, via
 // `git worktree remove`, or `git worktree remove --force` when item.Dirty is
-// set, then deletes the branch via `git branch -d`, or `git branch -D`
-// (force) when item.Unmerged is set. Callers must only pass Dirty or
-// Unmerged items after the user has given explicit, phrase-typed consent
-// (see internal/ui's modeConfirmForceDelete) — this function performs no
+// set, or `git worktree remove --force --force` when item.Locked is set (a
+// single --force is not enough for git to remove a locked worktree), then
+// deletes the branch via `git branch -d`, or `git branch -D` (force) when
+// item.Unmerged is set. Callers must only pass Dirty, Locked, or Unmerged
+// items after the user has given explicit, phrase-typed consent (see
+// internal/ui's modeConfirmForceDelete) — this function performs no
 // confirmation of its own. Items without a worktree skip straight to the
 // branch delete. Every item is attempted even if earlier ones fail; all
 // failures are combined into a single returned error.
@@ -74,13 +76,12 @@ func deleteWorktreesWith(run runnerFunc, items []gitdata.Item) error {
 			errs = append(errs, fmt.Errorf("%s: cannot delete the current worktree", item.Branch))
 			continue
 		}
-		if item.Locked {
-			errs = append(errs, fmt.Errorf("%s: cannot delete a locked worktree", item.Branch))
-			continue
-		}
 		if item.HasWorktree() {
 			args := []string{"worktree", "remove"}
-			if item.Dirty {
+			switch {
+			case item.Locked:
+				args = append(args, "--force", "--force")
+			case item.Dirty:
 				args = append(args, "--force")
 			}
 			args = append(args, item.Path)

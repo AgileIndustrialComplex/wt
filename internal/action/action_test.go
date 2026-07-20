@@ -163,16 +163,35 @@ func TestDeleteWorktreesWithRejectsCurrentWorktree(t *testing.T) {
 	}
 }
 
-func TestDeleteWorktreesWithRejectsLockedWorktree(t *testing.T) {
+func TestDeleteWorktreesWithForcesRemoveOfLockedWorktreeTwice(t *testing.T) {
 	run, calls := recordingRunner()
 	item := gitdata.Item{Branch: "release/2.1", Path: "/repo/proj-release", Locked: true}
 
-	err := deleteWorktreesWith(run, []gitdata.Item{item})
-	if err == nil || !strings.Contains(err.Error(), "locked worktree") {
-		t.Fatalf("deleteWorktreesWith() error = %v, want locked worktree error", err)
+	if err := deleteWorktreesWith(run, []gitdata.Item{item}); err != nil {
+		t.Fatalf("deleteWorktreesWith() error = %v", err)
 	}
-	if len(*calls) != 0 {
-		t.Fatalf("git calls = %v, want none", *calls)
+	want := [][]string{
+		{"worktree", "remove", "--force", "--force", "/repo/proj-release"},
+		{"branch", "-d", "release/2.1"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestDeleteWorktreesWithLockedAndDirtyUsesOnlyDoubleForce(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "release/2.1", Path: "/repo/proj-release", Locked: true, Dirty: true}
+
+	if err := deleteWorktreesWith(run, []gitdata.Item{item}); err != nil {
+		t.Fatalf("deleteWorktreesWith() error = %v", err)
+	}
+	want := [][]string{
+		{"worktree", "remove", "--force", "--force", "/repo/proj-release"},
+		{"branch", "-d", "release/2.1"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
 	}
 }
 

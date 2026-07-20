@@ -29,10 +29,10 @@ const (
 )
 
 // ForceDeleteConfirmPhrase is the exact text a user must type to delete a
-// branch with unmerged changes, or a worktree with modified or untracked
-// files. It must match verbatim (case-sensitive) — this is deliberate
-// friction against losing uncommitted work, so it is never made
-// configurable.
+// branch with unmerged changes, a worktree with modified or untracked files,
+// or a locked worktree. It must match verbatim (case-sensitive) — this is
+// deliberate friction against losing uncommitted work or bypassing an
+// explicit lock, so it is never made configurable.
 const ForceDeleteConfirmPhrase = "delete"
 
 // Result is what the picker produced when the program exited.
@@ -126,7 +126,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateConfirmDelete handles the approval step shown after pressing D with
 // at least one branch marked. Enter confirms: if any marked branch is
-// unmerged, or any marked worktree is dirty, it advances to
+// unmerged, or any marked worktree is dirty or locked, it advances to
 // modeConfirmForceDelete for an explicit phrase-typed confirmation instead
 // of quitting immediately. Any cancel key stops the operation and returns to
 // the list without quitting the picker.
@@ -137,7 +137,7 @@ func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.Type == tea.KeyEnter {
 		marked := m.Marked()
-		if hasUnmergedBranch(marked) || hasDirtyWorktree(marked) {
+		if hasUnmergedBranch(marked) || hasDirtyWorktree(marked) || hasLockedWorktree(marked) {
 			m.forceConfirmInput = ""
 			m.mode = modeConfirmForceDelete
 			return m, nil
@@ -151,11 +151,12 @@ func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateConfirmForceDelete handles the phrase-typed approval step shown
 // when at least one marked branch has unmerged changes, or at least one
-// marked worktree has modified or untracked files. Esc/Ctrl-C cancel back to
-// the list; Enter only confirms and quits (with the full marked set in
-// Result.Delete) when the typed text matches ForceDeleteConfirmPhrase
-// exactly, otherwise it is a no-op so the user can keep correcting the
-// input. "q" is not treated as cancel here since it is valid input text.
+// marked worktree has modified or untracked files or is locked. Esc/Ctrl-C
+// cancel back to the list; Enter only confirms and quits (with the full
+// marked set in Result.Delete) when the typed text matches
+// ForceDeleteConfirmPhrase exactly, otherwise it is a no-op so the user can
+// keep correcting the input. "q" is not treated as cancel here since it is
+// valid input text.
 func (m Model) updateConfirmForceDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC:
@@ -200,6 +201,19 @@ func hasUnmergedBranch(items []gitdata.Item) bool {
 func hasDirtyWorktree(items []gitdata.Item) bool {
 	for _, item := range items {
 		if item.Dirty {
+			return true
+		}
+	}
+	return false
+}
+
+// hasLockedWorktree reports whether any item's worktree is locked — the
+// condition that makes `git worktree remove` refuse to delete it even with
+// a single --force (git requires --force twice to remove a locked
+// worktree).
+func hasLockedWorktree(items []gitdata.Item) bool {
+	for _, item := range items {
+		if item.Locked {
 			return true
 		}
 	}
@@ -405,15 +419,16 @@ func (m Model) selected() *gitdata.Item {
 	return &m.items[m.filtered[m.cursor]]
 }
 
-// toggleMarked flips the marked state of the highlighted item. Only
-// removable branches can be marked: the current worktree and locked
-// worktrees are excluded.
+// toggleMarked flips the marked state of the highlighted item. Only the
+// current worktree is excluded from marking; locked worktrees can be
+// marked and deleted, subject to the phrase-typed force-delete
+// confirmation in modeConfirmForceDelete.
 func (m *Model) toggleMarked() {
 	if m.cursor < 0 || m.cursor >= len(m.filtered) {
 		return
 	}
 	idx := m.filtered[m.cursor]
-	if m.items[idx].IsCurrent || m.items[idx].Locked {
+	if m.items[idx].IsCurrent {
 		return
 	}
 	m.marked[idx] = !m.marked[idx]
@@ -555,6 +570,14 @@ func (m Model) View() string {
 				}
 			}
 		}
+		if hasLockedWorktree(marked) {
+			b.WriteString("The following worktree(s) are locked and will be force-unlocked and removed:\n")
+			for _, item := range marked {
+				if item.Locked {
+					fmt.Fprintf(&b, "  %s  %s\n", item.Branch, item.Path)
+				}
+			}
+		}
 		fmt.Fprintf(&b, "Type %q and press Enter to proceed, or Esc to cancel:\n\n", ForceDeleteConfirmPhrase)
 		fmt.Fprintf(&b, "> %s\n", m.forceConfirmInput)
 		return b.String()
@@ -673,7 +696,7 @@ func (m Model) helpView() string {
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
 		"  mark       : c  (selection)",
-		"  delete     : D  (marked branches, asks to confirm; unmerged branches or dirty worktrees require typing a phrase)",
+		"  delete     : D  (marked branches, asks to confirm; unmerged branches, dirty worktrees, or locked worktrees require typing a phrase)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",
