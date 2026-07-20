@@ -219,11 +219,12 @@ func TestMarkIgnoredOnCurrentWorktree(t *testing.T) {
 	}
 }
 
-func TestMarkIgnoredOnLockedWorktree(t *testing.T) {
+func TestMarkAllowedOnLockedWorktree(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('G'), key('c'))
-	if len(m.Marked()) != 0 {
-		t.Fatalf("Marked() = %+v, want empty for locked worktree", m.Marked())
+	marked := m.Marked()
+	if len(marked) != 1 || marked[0].Branch != "release/2.1" {
+		t.Fatalf("Marked() = %+v, want [release/2.1]", marked)
 	}
 }
 
@@ -563,6 +564,51 @@ func TestForceDeleteViewListsBothUnmergedBranchAndDirtyWorktree(t *testing.T) {
 	}
 }
 
+func TestConfirmDeleteEnterWithLockedWorktreeEntersForceDeleteMode(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true) // release/2.1 is locked
+	m = send(t, m, key('G'), key('c'), key('D'), keyType(tea.KeyEnter))
+	if m.mode != modeConfirmForceDelete {
+		t.Fatalf("mode after confirming delete with a locked worktree = %v, want modeConfirmForceDelete", m.mode)
+	}
+	if m.quitting {
+		t.Fatal("Enter in modeConfirmDelete with a locked worktree should not quit yet")
+	}
+}
+
+func TestForceDeleteViewListsOnlyLockedWorktreesFromMixedBatch(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('G'), key('c'), key('D'), keyType(tea.KeyEnter))
+	view := m.View()
+	if !strings.Contains(view, "release/2.1") {
+		t.Fatalf("force-delete view missing locked worktree:\n%s", view)
+	}
+	if strings.Contains(view, "feature/login") {
+		t.Fatalf("force-delete view should not list unlocked worktree feature/login:\n%s", view)
+	}
+	if !strings.Contains(view, "locked") {
+		t.Fatalf("force-delete view missing locked-worktree section:\n%s", view)
+	}
+	if !strings.Contains(view, ForceDeleteConfirmPhrase) {
+		t.Fatalf("force-delete view missing required phrase:\n%s", view)
+	}
+}
+
+func TestForceDeleteExactPhraseQuitsWithLockedWorktree(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('G'), key('c'), key('D'), keyType(tea.KeyEnter))
+	for _, r := range ForceDeleteConfirmPhrase {
+		m = send(t, m, key(r))
+	}
+	m = send(t, m, keyType(tea.KeyEnter))
+	if !m.quitting {
+		t.Fatal("Enter with the exact phrase in modeConfirmForceDelete should quit the program")
+	}
+	res := m.Result()
+	if len(res.Delete) != 1 || res.Delete[0].Branch != "release/2.1" {
+		t.Fatalf("Result().Delete = %+v, want [release/2.1]", res.Delete)
+	}
+}
+
 func TestHelpOverlayReturnsToList(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('?'))
@@ -582,7 +628,7 @@ func TestHelpOverlayDocumentsMarkBindingAndSemantics(t *testing.T) {
 	if !strings.Contains(view, "mark       : c  (selection)") {
 		t.Fatalf("help overlay missing mark binding:\n%s", view)
 	}
-	if !strings.Contains(view, "delete     : D  (marked branches, asks to confirm; unmerged branches or dirty worktrees require typing a phrase)") {
+	if !strings.Contains(view, "delete     : D  (marked branches, asks to confirm; unmerged branches, dirty worktrees, or locked worktrees require typing a phrase)") {
 		t.Fatalf("help overlay missing delete semantics:\n%s", view)
 	}
 }
