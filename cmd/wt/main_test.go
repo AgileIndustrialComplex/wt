@@ -4,7 +4,16 @@ import (
 	"bufio"
 	"os"
 	"testing"
+
+	"github.com/AgileIndustrialComplex/wt/internal/github"
 )
+
+func TestPRDisplayOrder(t *testing.T) {
+	got := prDisplay(github.PR{Number: 17, Branch: "feature/x", Title: "Add F key"})
+	if want := "#17  feature/x  Add F key"; got != want {
+		t.Fatalf("prDisplay() = %q, want %q", got, want)
+	}
+}
 
 func TestSubcommandSkipsLeadingWrapperFlags(t *testing.T) {
 	for _, tc := range []struct {

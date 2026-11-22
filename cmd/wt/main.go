@@ -198,7 +198,7 @@ func runPR(number string, pathOnly bool, worktreeRootFlag string, noColor bool) 
 		for _, pr := range prs {
 			items = append(items, gitdata.Item{
 				Branch:  pr.Branch,
-				Display: fmt.Sprintf("#%d  %s  (%s)", pr.Number, pr.Title, pr.Branch),
+				Display: prDisplay(pr),
 			})
 		}
 		top, err := gitdata.Toplevel()
@@ -252,6 +252,10 @@ func runPR(number string, pathOnly bool, worktreeRootFlag string, noColor bool) 
 		fmt.Fprintf(os.Stderr, "wt: run 'cd %s', or use shell integration (see `wt init`) to change directory automatically.\n", dest)
 	}
 	return nil
+}
+
+func prDisplay(pr github.PR) string {
+	return fmt.Sprintf("#%d  %s  %s", pr.Number, pr.Branch, pr.Title)
 }
 
 // itemForBranch returns the picker item for branch, or a bare item when the

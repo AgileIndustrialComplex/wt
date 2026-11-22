@@ -706,19 +706,17 @@ func TestSelectedStyleResumesAfterNestedStyleReset(t *testing.T) {
 
 func prItems() []gitdata.Item {
 	return []gitdata.Item{
-		{Branch: "feature/force-update", Display: "#17  Add F key  (feature/force-update)"},
-		{Branch: "feature/pr", Display: "#18  PR support  (feature/pr)"},
+		{Branch: "feature/force-update", Display: "#17  feature/force-update  Add F key"},
+		{Branch: "feature/pr", Display: "#18  feature/pr  PR support"},
 	}
 }
 
 func TestPRPickerShowsNumberAndTitle(t *testing.T) {
 	m := NewPR(prItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
 	view := m.View()
-	if !strings.Contains(view, "#17  Add F key") || !strings.Contains(view, "#18  PR support") {
-		t.Fatalf("PR picker view missing labels:\n%s", view)
-	}
-	if !strings.Contains(view, "feature/force-update") {
-		t.Fatalf("PR picker view missing branch name:\n%s", view)
+	if !strings.Contains(view, "#17  feature/force-update  Add F key") ||
+		!strings.Contains(view, "#18  feature/pr  PR support") {
+		t.Fatalf("PR picker view missing labels in number/branch/title order:\n%s", view)
 	}
 }
 

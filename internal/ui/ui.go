@@ -78,7 +78,7 @@ func New(items []gitdata.Item, toplevel string, worktreeRoot string, noColor boo
 }
 
 // NewPR builds a picker for PR branches. Rows are labelled with the PR
-// number and title, and the mark/delete/force-update keys are disabled.
+// number, branch and title, and the mark/delete/force-update keys are disabled.
 func NewPR(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool, defaultAction, keymap string) Model {
 	m := NewConfigured(items, toplevel, worktreeRoot, noColor, defaultAction, keymap)
 	m.prMode = true
@@ -513,7 +513,7 @@ func (m Model) proposeWorktreePath(branch string) string {
 }
 
 // itemLabel is the text shown in the picker. PR rows carry a label with the
-// PR number and title; ordinary rows show their branch name.
+// PR number, branch and title; ordinary rows show their branch name.
 func itemLabel(item gitdata.Item) string {
 	if item.Display != "" {
 		return item.Display
