@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+func TestSubcommandSkipsLeadingWrapperFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+		idx  int
+	}{
+		{[]string{"--path-only", "pr", "123"}, "pr", 1},
+		{[]string{"pr", "123", "--no-color"}, "pr", 0},
+		{[]string{"--worktree-root", "/wt", "--path-only", "pr"}, "pr", 3},
+		{[]string{"--version"}, "", -1},
+	} {
+		cmd, idx := subcommand(tc.args)
+		if cmd != tc.want || idx != tc.idx {
+			t.Errorf("subcommand(%v) = %q, %d, want %q, %d", tc.args, cmd, idx, tc.want, tc.idx)
+		}
+	}
+}
+
 func TestReadAnswerConsumesOneLinePerPrompt(t *testing.T) {
 	old := stdinReader
 	t.Cleanup(func() { stdinReader = old })
