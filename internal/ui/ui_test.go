@@ -720,6 +720,19 @@ func TestPRPickerShowsNumberAndTitle(t *testing.T) {
 	}
 }
 
+func TestPRPickerShowsCurrentMarker(t *testing.T) {
+	items := prItems()
+	items[1].IsCurrent = true
+	m := NewPR(items, "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
+	line := lineContaining(m.View(), "#18")
+	if !strings.Contains(line, "●") || !strings.Contains(line, "(current)") {
+		t.Fatalf("current PR row = %q, want ● and (current)", line)
+	}
+	if other := lineContaining(m.View(), "#17"); strings.Contains(other, "(current)") {
+		t.Fatalf("non-current PR row = %q, want no (current) suffix", other)
+	}
+}
+
 func TestPRPickerFiltersOnTitle(t *testing.T) {
 	m := NewPR(prItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
 	m = send(t, m, key('/'), key('p'), key('r'), key(' '), keyType(tea.KeyEnter))

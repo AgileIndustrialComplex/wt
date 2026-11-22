@@ -163,7 +163,9 @@ wt --no-color
 wt --version / --help
 ```
 
-**Pull requests:** `wt pr` runs `gh pr list --state open --json
+**Pull requests:** the PR row for the branch checked out in the current
+worktree sets `IsCurrent`, so the picker shows the same ● marker and
+`(current)` suffix as the normal branch list. `wt pr` runs `gh pr list --state open --json
 number,title,headRefName` and shows a picker with `#number  branch  title`
 rows; `wt pr 123` runs `gh pr view 123 --json ...` and skips the picker. Both
 then call `action.PreparePRBranch(branch, worktreePath, confirm)`: fetch that

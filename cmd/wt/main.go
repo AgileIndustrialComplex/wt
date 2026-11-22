@@ -194,13 +194,11 @@ func runPR(number string, pathOnly bool, worktreeRootFlag string, noColor bool) 
 			fmt.Fprintln(os.Stderr, "wt: no open pull requests")
 			return nil
 		}
-		items := make([]gitdata.Item, 0, len(prs))
-		for _, pr := range prs {
-			items = append(items, gitdata.Item{
-				Branch:  pr.Branch,
-				Display: prDisplay(pr),
-			})
+		current, err := currentBranch()
+		if err != nil {
+			return err
 		}
+		items := prItems(prs, current)
 		top, err := gitdata.Toplevel()
 		if err != nil {
 			return err
@@ -256,6 +254,34 @@ func runPR(number string, pathOnly bool, worktreeRootFlag string, noColor bool) 
 
 func prDisplay(pr github.PR) string {
 	return fmt.Sprintf("#%d  %s  %s", pr.Number, pr.Branch, pr.Title)
+}
+
+// prItems turns PRs into picker rows. The row matching the checked-out
+// branch is marked current, so the picker renders it with the same ● and
+// (current) suffix as the normal branch list.
+func prItems(prs []github.PR, current string) []gitdata.Item {
+	items := make([]gitdata.Item, 0, len(prs))
+	for _, pr := range prs {
+		items = append(items, gitdata.Item{
+			Branch:    pr.Branch,
+			Display:   prDisplay(pr),
+			IsCurrent: pr.Branch == current,
+		})
+	}
+	return items
+}
+
+func currentBranch() (string, error) {
+	items, err := gitdata.Collect()
+	if err != nil {
+		return "", err
+	}
+	for _, item := range items {
+		if item.IsCurrent {
+			return item.Branch, nil
+		}
+	}
+	return "", nil
 }
 
 // itemForBranch returns the picker item for branch, or a bare item when the

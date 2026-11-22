@@ -8,6 +8,19 @@ import (
 	"github.com/AgileIndustrialComplex/wt/internal/github"
 )
 
+func TestPRItemsMarkCurrentBranch(t *testing.T) {
+	items := prItems([]github.PR{
+		{Number: 17, Branch: "feature/force-update", Title: "A"},
+		{Number: 18, Branch: "feature/pr", Title: "B"},
+	}, "feature/pr")
+	if items[0].IsCurrent {
+		t.Fatalf("row for feature/force-update marked current, want only feature/pr")
+	}
+	if !items[1].IsCurrent {
+		t.Fatalf("row for feature/pr not marked current: %+v", items[1])
+	}
+}
+
 func TestPRDisplayOrder(t *testing.T) {
 	got := prDisplay(github.PR{Number: 17, Branch: "feature/x", Title: "Add F key"})
 	if want := "#17  feature/x  Add F key"; got != want {

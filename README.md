@@ -64,8 +64,10 @@ fast-forward ref update for a plain branch). A branch that has diverged is
 reported as an error and left untouched; a missing local branch is created
 from the remote tip without asking. Switching then follows the usual rules:
 a branch with a worktree returns its path, a plain branch shows the
-`[s]witch here / [w]orktree` prompt. `--no-color`, `--worktree-root DIR` and
-`--path-only` work here too. PR heads are resolved as `origin/<branch>`, so
+`[s]witch here / [w]orktree` prompt. The row whose branch is checked out in
+the current worktree shows ● and `(current)`, just like the normal picker.
+`--no-color`, `--worktree-root DIR` and `--path-only` work here too. PR heads
+are resolved as `origin/<branch>`, so
 this covers branches pushed to the repository's `origin`, not fork PR heads.
 
 Optional config file at `~/.config/wt/config.toml`:
