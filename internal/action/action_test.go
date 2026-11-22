@@ -243,3 +243,72 @@ func TestNewWorktreeWithRunsGitWorktreeAdd(t *testing.T) {
 		t.Fatalf("git calls = %v, want %v", *calls, want)
 	}
 }
+
+func TestForceUpdateWithFetchesOnceThenResetsWorktreeAndMovesPlainBranch(t *testing.T) {
+	run, calls := recordingRunner()
+	items := []gitdata.Item{
+		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "bugfix/api-timeout"},
+	}
+
+	if err := forceUpdateWith(run, items); err != nil {
+		t.Fatalf("forceUpdateWith() error = %v", err)
+	}
+	want := [][]string{
+		{"fetch", "origin"},
+		{"-C", "/repo/proj-login", "reset", "--hard", "origin/feature/login"},
+		{"branch", "-f", "bugfix/api-timeout", "origin/bugfix/api-timeout"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestForceUpdateWithDetachedOnlyRunsNoGit(t *testing.T) {
+	run, calls := recordingRunner()
+	item := gitdata.Item{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true}
+
+	if err := forceUpdateWith(run, []gitdata.Item{item}); err != nil {
+		t.Fatalf("forceUpdateWith() error = %v", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("git calls = %v, want none for a detached worktree", *calls)
+	}
+}
+
+func TestForceUpdateWithFetchFailureStopsBeforeAnyReset(t *testing.T) {
+	run := func(args ...string) error {
+		if args[0] == "fetch" {
+			return fmt.Errorf("no remote")
+		}
+		t.Fatalf("unexpected git call after failed fetch: %v", args)
+		return nil
+	}
+	item := gitdata.Item{Branch: "feature/login", Path: "/repo/proj-login"}
+
+	err := forceUpdateWith(run, []gitdata.Item{item})
+	if err == nil || !strings.Contains(err.Error(), "fetch origin") {
+		t.Fatalf("forceUpdateWith() error = %v, want fetch origin error", err)
+	}
+}
+
+func TestForceUpdateWithContinuesAfterFailureAndCombinesErrors(t *testing.T) {
+	run := func(args ...string) error {
+		if args[len(args)-1] == "origin/feature/login" {
+			return fmt.Errorf("boom")
+		}
+		return nil
+	}
+	items := []gitdata.Item{
+		{Branch: "feature/login", Path: "/repo/proj-login"},
+		{Branch: "bugfix/api-timeout"},
+	}
+
+	err := forceUpdateWith(run, items)
+	if err == nil {
+		t.Fatal("forceUpdateWith() error = nil, want combined error from the failing item")
+	}
+	if !strings.Contains(err.Error(), "feature/login") {
+		t.Fatalf("error = %v, want it to mention feature/login", err)
+	}
+}

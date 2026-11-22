@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more branches (and their worktrees, where present) in bulk, via a mark-then-confirm flow. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`, explicitly confirmed `worktree remove --force` or `worktree remove --force --force`, `branch -d`, or explicitly confirmed `branch -D`) happens only after user confirmation, and only via standard `git` invocations.
+`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more branches (and their worktrees, where present) in bulk, via a mark-then-confirm flow, and force-update one or more branches to their upstream tip via a similar confirmation flow. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`, explicitly confirmed `worktree remove --force` or `worktree remove --force --force`, `branch -d`, explicitly confirmed `branch -D`, and confirmed `fetch` + `reset --hard` / `branch -f`) happens only after user confirmation, and only via standard `git` invocations.
 
 ## 2. Technology Choice
 
@@ -52,13 +52,14 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
 │  - worktree path → emit cd path to wrapper   (no git mutation)
 │  - existing path → return it to the shell wrapper
 │  - marked set    → git worktree remove (forced if dirty/locked) + git branch -d/-D, per item
+│  - F target set  → git fetch origin, then reset --hard / branch -f to origin/<branch>
 └──────────────────────┘
 ```
 
 **Data flow:**
 1. `gitdata` runs `git branch --list --format='%(refname:short)'`, `git branch --format='%(refname:short)' --merged`, `git worktree list --porcelain -z`, and `git status --porcelain` scoped to each worktree's path, parses their output, and produces a single normalized list of items, cross-referencing merge status, dirty (modified/untracked) status, and which branches are already checked out in a worktree (the exact information `git switch` uses to produce its "already checked out" error — surfacing it up front removes the dead end).
 2. `ui` renders the list, handles keystrokes purely as state transitions (no side effects) until the user confirms.
-3. `action` executes exactly one of: `git switch`, `git worktree add`, a directory change (for worktrees), or — after the mark-then-`D`-then-confirm flow — `git worktree remove` (only for marked items that have a worktree; `--force` for dirty worktrees and `--force --force` for locked worktrees, after phrase-typed confirmation) followed by `git branch -d` for merged branches or, after phrase-typed confirmation, `git branch -D` for unmerged branches.
+3. `action` executes exactly one of: `git switch`, `git worktree add`, a directory change (for worktrees), the mark-then-`D`-then-confirm deletion flow, or the `F`-then-confirm force-update flow: one `git fetch origin`, then `git reset --hard origin/<branch>` for each target branch with a worktree and `git branch -f <branch> origin/<branch>` for each target branch without one. Detached worktrees have no branch and are skipped.
 
 **Directory-change trick:** a subprocess cannot change its parent shell's `cwd`. `wt` handles this the same way `zoxide`/`fzf`-based `cd` wrappers do — see §5.
 
@@ -136,6 +137,16 @@ Type "delete" and press Enter to proceed, or Esc to cancel:
   screen on their own, though they can still trigger it via the dirty
   check if they have modified or untracked files.
 
+**Force-updating branches:** highlighting a row (or marking several with
+`c`) and pressing `F` opens a confirmation screen listing the target
+branch(es) and their worktree paths (or `(no worktree)`). `Enter` runs one
+`git fetch origin`, then `git reset --hard origin/<branch>` for each target
+with a worktree and `git branch -f <branch> origin/<branch>` for each plain
+target. This discards local commits and, in worktrees, uncommitted changes;
+the confirmation screen warns when a target worktree is dirty. Detached
+worktrees are skipped. `Esc`/`Ctrl-C`/`q` cancels without touching Git state
+or clearing marks. The hint line and `?` overlay document the binding.
+
 ## 5. Implementation Details
 
 **Command-line arguments:**
@@ -170,7 +181,7 @@ The authoritative collector and action implementations are in
 **Integration tests** (real repositories):
 - Use `t.TempDir()` to create scratch repositories via actual `git init`, `git commit --allow-empty`, and `git worktree add` commands.
 - Drive the action and collection layers against the scratch repository and assert the resulting paths and Git repository state.
-- Cover switching a plain branch, resolving an existing worktree, creating a worktree, and deleting marked branches, both with and without a worktree.
+- Cover switching a plain branch, resolving an existing worktree, creating a worktree, deleting marked branches (with and without a worktree), and force-updating both a plain branch and a worktree branch to a remote tip that has advanced locally.
 
 ## 7. Building
 

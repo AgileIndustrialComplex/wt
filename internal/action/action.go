@@ -54,6 +54,47 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 	return path, nil
 }
 
+// ForceUpdate resets each branch to its upstream tip. It runs a single
+// `git fetch origin`, then `git reset --hard origin/<branch>` for branches
+// with a worktree and `git branch -f <branch> origin/<branch>` for plain
+// branches. Callers must only pass items after the user has confirmed the
+// action (see internal/ui's modeConfirmForceUpdate) — this function performs
+// no confirmation of its own. Detached worktrees have no branch and are
+// skipped. Every item is attempted even if earlier ones fail; all failures
+// are combined into a single returned error.
+func ForceUpdate(items []gitdata.Item) error {
+	return forceUpdateWith(runGit, items)
+}
+
+func forceUpdateWith(run runnerFunc, items []gitdata.Item) error {
+	var targets []gitdata.Item
+	for _, item := range items {
+		if !item.Detached {
+			targets = append(targets, item)
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if err := run("fetch", "origin"); err != nil {
+		return fmt.Errorf("fetch origin: %w", err)
+	}
+	var errs []error
+	for _, item := range targets {
+		ref := "origin/" + item.Branch
+		if item.HasWorktree() {
+			if err := run("-C", item.Path, "reset", "--hard", ref); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
+			}
+			continue
+		}
+		if err := run("branch", "-f", item.Branch, ref); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", item.Branch, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // DeleteWorktrees removes each item's worktree, if it has one, via
 // `git worktree remove`, or `git worktree remove --force` when item.Dirty is
 // set, or `git worktree remove --force --force` when item.Locked is set (a
