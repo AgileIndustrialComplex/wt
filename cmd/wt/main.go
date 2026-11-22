@@ -21,6 +21,22 @@ import (
 
 var version = "dev"
 
+// subcommand returns the first non-flag argument and its position in args,
+// skipping flags that take a separate value. The shell wrapper prepends
+// --path-only, so a subcommand may not be the first argument.
+func subcommand(args []string) (string, int) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			return arg, i
+		}
+		if (arg == "--worktree-root" || arg == "-worktree-root") && i+1 < len(args) {
+			i++
+		}
+	}
+	return "", -1
+}
+
 // One reader for all prompts: a fresh bufio.Reader would buffer and discard
 // answers meant for the next prompt in the same invocation.
 var stdinReader = bufio.NewReader(os.Stdin)
@@ -38,7 +54,10 @@ func main() {
 		return
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "pr" {
+	if cmd, cmdIdx := subcommand(os.Args[1:]); cmd == "pr" {
+		// The shell wrapper prepends --path-only, so "pr" is not necessarily
+		// the first argument. Pass every other argument to the PR flag set.
+		prArgs := append(append([]string{}, os.Args[1:cmdIdx+1]...), os.Args[cmdIdx+2:]...)
 		prFlags := flag.NewFlagSet("pr", flag.ExitOnError)
 		prPathOnly := prFlags.Bool("path-only", false, "print the chosen destination path, no cd (for scripting)")
 		prWorktreeRoot := prFlags.String("worktree-root", "", "base directory to propose for new worktrees")
@@ -47,7 +66,7 @@ func main() {
 		// after any flags: both `wt pr 123 --no-color` and
 		// `wt pr --no-color 123` must work.
 		var flagArgs, positional []string
-		args := os.Args[2:]
+		args := prArgs
 		for i := 0; i < len(args); i++ {
 			arg := args[i]
 			if !strings.HasPrefix(arg, "-") {
