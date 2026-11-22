@@ -483,6 +483,150 @@ func TestIntegrationForceUpdateWorktreeBranchToRemoteTip(t *testing.T) {
 	}
 }
 
+// initPRRemote initialises repo with a bare origin and pushes its first
+// commit. Names are distinct from other PRs' helpers to keep branches
+// independent until they merge.
+func initPRRemote(t *testing.T, repo string) string {
+	t.Helper()
+	initRepo(t, repo)
+	tmp := t.TempDir()
+	remote := filepath.Join(tmp, "origin.git")
+	runGit(t, tmp, "init", "--bare", "-b", "main", remote)
+	runGit(t, repo, "remote", "add", "origin", remote)
+	runGit(t, repo, "push", "-u", "origin", "main")
+	return remote
+}
+
+func clonePRRemote(t *testing.T, remote string) string {
+	t.Helper()
+	parent := t.TempDir()
+	clone := filepath.Join(parent, "clone")
+	runGit(t, parent, "clone", remote, clone)
+	runGit(t, clone, "config", "user.email", "wt-test@example.com")
+	runGit(t, clone, "config", "user.name", "wt test")
+	runGit(t, clone, "config", "commit.gpgsign", "false")
+	return clone
+}
+
+// advancedPRBranch pushes a new commit on branch from a second clone and
+// returns the resulting remote tip.
+func advancedPRBranch(t *testing.T, remote, branch string) string {
+	t.Helper()
+	other := clonePRRemote(t, remote)
+	runGit(t, other, "checkout", "-b", branch, "origin/"+branch)
+	runGit(t, other, "commit", "--allow-empty", "-m", "remote commit")
+	runGit(t, other, "push", "origin", branch)
+	return strings.TrimSpace(runGit(t, other, "rev-parse", branch))
+}
+
+func TestIntegrationPreparePRBranchFastForwardsPlainBranch(t *testing.T) {
+	repo := t.TempDir()
+	remote := initPRRemote(t, repo)
+	runGit(t, repo, "branch", "feature/x")
+	runGit(t, repo, "push", "origin", "feature/x")
+	want := advancedPRBranch(t, remote, "feature/x")
+	chdir(t, repo)
+
+	ok, err := action.PreparePRBranch("feature/x", "", func() bool { return true })
+	if err != nil || !ok {
+		t.Fatalf("PreparePRBranch() = %v, %v, want true, nil", ok, err)
+	}
+	if got := strings.TrimSpace(runGit(t, repo, "rev-parse", "feature/x")); got != want {
+		t.Fatalf("feature/x = %s, want remote tip %s", got, want)
+	}
+}
+
+func TestIntegrationPreparePRBranchDeclinedLeavesBranchAlone(t *testing.T) {
+	repo := t.TempDir()
+	remote := initPRRemote(t, repo)
+	runGit(t, repo, "branch", "feature/x")
+	runGit(t, repo, "push", "origin", "feature/x")
+	before := strings.TrimSpace(runGit(t, repo, "rev-parse", "feature/x"))
+	advancedPRBranch(t, remote, "feature/x")
+	chdir(t, repo)
+
+	asked := false
+	ok, err := action.PreparePRBranch("feature/x", "", func() bool { asked = true; return false })
+	if err != nil {
+		t.Fatalf("PreparePRBranch() error = %v", err)
+	}
+	if ok || !asked {
+		t.Fatalf("PreparePRBranch() = %v, asked = %v, want false/true after decline", ok, asked)
+	}
+	if got := strings.TrimSpace(runGit(t, repo, "rev-parse", "feature/x")); got != before {
+		t.Fatalf("feature/x = %s after decline, want unchanged %s", got, before)
+	}
+}
+
+func TestIntegrationPreparePRBranchRejectsDivergedBranch(t *testing.T) {
+	repo := t.TempDir()
+	remote := initPRRemote(t, repo)
+	runGit(t, repo, "branch", "feature/x")
+	runGit(t, repo, "push", "origin", "feature/x")
+	runGit(t, repo, "checkout", "feature/x")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "local commit")
+	runGit(t, repo, "checkout", "main")
+	before := strings.TrimSpace(runGit(t, repo, "rev-parse", "feature/x"))
+	advancedPRBranch(t, remote, "feature/x")
+	chdir(t, repo)
+
+	ok, err := action.PreparePRBranch("feature/x", "", func() bool { return true })
+	if err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatalf("PreparePRBranch() error = %v, want diverged error", err)
+	}
+	if ok {
+		t.Fatal("PreparePRBranch() = true for a diverged branch, want false")
+	}
+	if got := strings.TrimSpace(runGit(t, repo, "rev-parse", "feature/x")); got != before {
+		t.Fatalf("feature/x = %s after rejected fast-forward, want unchanged %s", got, before)
+	}
+}
+
+func TestIntegrationPreparePRBranchCreatesMissingBranch(t *testing.T) {
+	repo := t.TempDir()
+	remote := initPRRemote(t, repo)
+	other := clonePRRemote(t, remote)
+	runGit(t, other, "checkout", "-b", "feature/new")
+	runGit(t, other, "commit", "--allow-empty", "-m", "new PR commit")
+	runGit(t, other, "push", "-u", "origin", "feature/new")
+	want := strings.TrimSpace(runGit(t, other, "rev-parse", "feature/new"))
+	chdir(t, repo)
+
+	if branches := runGit(t, repo, "branch", "--list", "feature/new"); strings.TrimSpace(branches) != "" {
+		t.Fatalf("feature/new already exists locally before prepare: %q", branches)
+	}
+	asked := false
+	ok, err := action.PreparePRBranch("feature/new", "", func() bool { asked = true; return true })
+	if err != nil || !ok {
+		t.Fatalf("PreparePRBranch() = %v, %v, want true, nil", ok, err)
+	}
+	if asked {
+		t.Fatal("creating a missing branch should not ask for a fast-forward")
+	}
+	if got := strings.TrimSpace(runGit(t, repo, "rev-parse", "feature/new")); got != want {
+		t.Fatalf("feature/new = %s, want remote tip %s", got, want)
+	}
+}
+
+func TestIntegrationPreparePRBranchFastForwardsWorktree(t *testing.T) {
+	repo := t.TempDir()
+	remote := initPRRemote(t, repo)
+	runGit(t, repo, "branch", "feature/x")
+	runGit(t, repo, "push", "origin", "feature/x")
+	wtDir := filepath.Join(t.TempDir(), "feature-x-checkout")
+	runGit(t, repo, "worktree", "add", wtDir, "feature/x")
+	want := advancedPRBranch(t, remote, "feature/x")
+	chdir(t, repo)
+
+	ok, err := action.PreparePRBranch("feature/x", wtDir, func() bool { return true })
+	if err != nil || !ok {
+		t.Fatalf("PreparePRBranch() = %v, %v, want true, nil", ok, err)
+	}
+	if got := strings.TrimSpace(runGit(t, wtDir, "rev-parse", "HEAD")); got != want {
+		t.Fatalf("feature/x worktree HEAD = %s, want remote tip %s", got, want)
+	}
+}
+
 func worktreePathForBranch(t *testing.T, repo, branch string) string {
 	t.Helper()
 	out := runGit(t, repo, "worktree", "list", "--porcelain")

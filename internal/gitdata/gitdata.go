@@ -24,8 +24,9 @@ type Item struct {
 	IsCurrent bool
 	Locked    bool
 	Detached  bool
-	Unmerged  bool // true if the branch is not fully merged into HEAD (git branch -d would refuse it)
-	Dirty     bool // true if the worktree has modified or untracked files (git worktree remove would refuse it)
+	Unmerged  bool   // true if the branch is not fully merged into HEAD (git branch -d would refuse it)
+	Dirty     bool   // true if the worktree has modified or untracked files (git worktree remove would refuse it)
+	Display   string // optional picker label (e.g. "#123 PR title"); falls back to Branch
 }
 
 // HasWorktree reports whether the branch is checked out anywhere.

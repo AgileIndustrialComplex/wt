@@ -704,6 +704,55 @@ func TestSelectedStyleResumesAfterNestedStyleReset(t *testing.T) {
 	}
 }
 
+func prItems() []gitdata.Item {
+	return []gitdata.Item{
+		{Branch: "feature/force-update", Display: "#17  Add F key  (feature/force-update)"},
+		{Branch: "feature/pr", Display: "#18  PR support  (feature/pr)"},
+	}
+}
+
+func TestPRPickerShowsNumberAndTitle(t *testing.T) {
+	m := NewPR(prItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
+	view := m.View()
+	if !strings.Contains(view, "#17  Add F key") || !strings.Contains(view, "#18  PR support") {
+		t.Fatalf("PR picker view missing labels:\n%s", view)
+	}
+	if !strings.Contains(view, "feature/force-update") {
+		t.Fatalf("PR picker view missing branch name:\n%s", view)
+	}
+}
+
+func TestPRPickerFiltersOnTitle(t *testing.T) {
+	m := NewPR(prItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
+	m = send(t, m, key('/'), key('p'), key('r'), key(' '), keyType(tea.KeyEnter))
+	if len(m.filtered) != 1 || m.items[m.filtered[0]].Branch != "feature/pr" {
+		t.Fatalf("filter on PR title -> %v, want only feature/pr", m.filtered)
+	}
+}
+
+func TestPRPickerDisablesMarkDeleteAndForceKeys(t *testing.T) {
+	m := NewPR(prItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
+	m = send(t, m, key('c'), key('D'), key('F'))
+	if len(m.Marked()) != 0 {
+		t.Fatalf("Marked() in PR picker = %+v, want none", m.Marked())
+	}
+	if m.mode != modeList || m.quitting {
+		t.Fatalf("mode = %v, quitting = %v after c/D/F in PR picker, want list/not quitting", m.mode, m.quitting)
+	}
+}
+
+func TestPRPickerHelpHidesMarkKeys(t *testing.T) {
+	m := NewPR(prItems(), "/repo/proj", "", true, config.ActionPrompt, config.KeymapVim)
+	m = send(t, m, key('?'))
+	view := m.View()
+	if strings.Contains(view, "mark       :") || strings.Contains(view, "delete     :") || strings.Contains(view, "force update:") {
+		t.Fatalf("PR help still shows mark/delete/force keys:\n%s", view)
+	}
+	if !strings.Contains(view, "filter") || !strings.Contains(view, "confirm") {
+		t.Fatalf("PR help missing navigation hints:\n%s", view)
+	}
+}
+
 func TestFKeyWithNoMarksTargetsHighlightedItem(t *testing.T) {
 	m := New(testItems(), "/repo/proj", "", true)
 	m = send(t, m, key('j'), key('F'))

@@ -229,6 +229,135 @@ func TestDeleteWorktreesWithContinuesAfterFailureAndCombinesErrors(t *testing.T)
 	}
 }
 
+func prFakeRunner(responses map[string]string) (outputRunnerFunc, *[][]string) {
+	var calls [][]string
+	run := func(args ...string) (string, error) {
+		calls = append(calls, append([]string{}, args...))
+		key := strings.Join(args, " ")
+		if out, ok := responses[key]; ok {
+			return out, nil
+		}
+		if args[0] == "branch" || args[0] == "-C" {
+			return "", nil
+		}
+		return "", fmt.Errorf("unexpected git call: %v", args)
+	}
+	return run, &calls
+}
+
+func prBehindResponses() map[string]string {
+	return map[string]string{
+		"fetch origin feature/x":                          "",
+		"rev-parse --verify --quiet refs/heads/feature/x": "aaa",
+		"rev-parse --verify --quiet origin/feature/x":     "bbb",
+		"rev-list --count origin/feature/x..feature/x":    "0",
+		"rev-list --count feature/x..origin/feature/x":    "2",
+	}
+}
+
+func TestPreparePRBranchFastForwardsPlainBranchAfterConsent(t *testing.T) {
+	run, calls := prFakeRunner(prBehindResponses())
+	confirmed := 0
+
+	ok, err := preparePRBranchWith(run, "feature/x", "", func() bool { confirmed++; return true })
+	if err != nil {
+		t.Fatalf("preparePRBranchWith() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("preparePRBranchWith() = false, want ready to switch")
+	}
+	if confirmed != 1 {
+		t.Fatalf("confirm called %d times, want 1", confirmed)
+	}
+	want := [][]string{
+		{"fetch", "origin", "feature/x"},
+		{"rev-parse", "--verify", "--quiet", "refs/heads/feature/x"},
+		{"rev-parse", "--verify", "--quiet", "origin/feature/x"},
+		{"rev-list", "--count", "origin/feature/x..feature/x"},
+		{"rev-list", "--count", "feature/x..origin/feature/x"},
+		{"branch", "-f", "feature/x", "origin/feature/x"},
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("git calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestPreparePRBranchFastForwardsWorktreeWithMerge(t *testing.T) {
+	run, calls := prFakeRunner(prBehindResponses())
+	ok, err := preparePRBranchWith(run, "feature/x", "/repo/proj-x", func() bool { return true })
+	if err != nil || !ok {
+		t.Fatalf("preparePRBranchWith() = %v, %v, want true, nil", ok, err)
+	}
+	wantLast := []string{"-C", "/repo/proj-x", "merge", "--ff-only", "origin/feature/x"}
+	if got := (*calls)[len(*calls)-1]; !reflect.DeepEqual(got, wantLast) {
+		t.Fatalf("last git call = %v, want %v", got, wantLast)
+	}
+}
+
+func TestPreparePRBranchDeclinedDoesNotMutate(t *testing.T) {
+	run, calls := prFakeRunner(prBehindResponses())
+	ok, err := preparePRBranchWith(run, "feature/x", "", func() bool { return false })
+	if err != nil {
+		t.Fatalf("preparePRBranchWith() error = %v", err)
+	}
+	if ok {
+		t.Fatal("preparePRBranchWith() = true after decline, want false")
+	}
+	for _, call := range *calls {
+		if call[0] == "branch" || call[0] == "merge" || call[0] == "-C" {
+			t.Fatalf("unexpected mutation after decline: %v", call)
+		}
+	}
+}
+
+func TestPreparePRBranchRejectsDivergedBranchWithoutAsking(t *testing.T) {
+	responses := prBehindResponses()
+	responses["rev-list --count origin/feature/x..feature/x"] = "1"
+	run, _ := prFakeRunner(responses)
+	asked := false
+
+	ok, err := preparePRBranchWith(run, "feature/x", "", func() bool { asked = true; return true })
+	if err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatalf("preparePRBranchWith() error = %v, want diverged error", err)
+	}
+	if ok || asked {
+		t.Fatalf("preparePRBranchWith() = %v, confirm asked = %v, want false/false", ok, asked)
+	}
+}
+
+func TestPreparePRBranchCreatesMissingBranchFromRemoteTip(t *testing.T) {
+	responses := prBehindResponses()
+	delete(responses, "rev-parse --verify --quiet refs/heads/feature/x")
+	run, calls := prFakeRunner(responses)
+	asked := false
+
+	ok, err := preparePRBranchWith(run, "feature/x", "", func() bool { asked = true; return true })
+	if err != nil || !ok {
+		t.Fatalf("preparePRBranchWith() = %v, %v, want true, nil", ok, err)
+	}
+	if asked {
+		t.Fatal("missing branch should be created without asking")
+	}
+	wantLast := []string{"branch", "feature/x", "origin/feature/x"}
+	if got := (*calls)[len(*calls)-1]; !reflect.DeepEqual(got, wantLast) {
+		t.Fatalf("last git call = %v, want %v", got, wantLast)
+	}
+}
+
+func TestPreparePRBranchUpToDateRunsNoMutation(t *testing.T) {
+	responses := prBehindResponses()
+	responses["rev-parse --verify --quiet origin/feature/x"] = "aaa"
+	run, calls := prFakeRunner(responses)
+
+	ok, err := preparePRBranchWith(run, "feature/x", "", func() bool { return true })
+	if err != nil || !ok {
+		t.Fatalf("preparePRBranchWith() = %v, %v, want true, nil", ok, err)
+	}
+	if len(*calls) != 3 {
+		t.Fatalf("git calls = %v, want only fetch and two rev-parse checks", *calls)
+	}
+}
+
 func TestNewWorktreeWithRunsGitWorktreeAdd(t *testing.T) {
 	run, calls := recordingRunner()
 	path, err := newWorktreeWith(run, "/repo/proj-login", "feature/login")

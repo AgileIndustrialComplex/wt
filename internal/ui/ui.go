@@ -60,6 +60,7 @@ type Model struct {
 	defaultAction string
 	keymap        string
 	height        int
+	prMode        bool // PR picker: rows show PR labels and mark/delete/force keys are disabled
 
 	forceConfirmInput string         // typed phrase in modeConfirmForceDelete
 	forceTargets      []gitdata.Item // branches F will force-update, marked set or highlighted item
@@ -74,6 +75,14 @@ type Model struct {
 // are proposed; if empty, new worktrees are proposed as siblings of toplevel.
 func New(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool) Model {
 	return NewConfigured(items, toplevel, worktreeRoot, noColor, config.ActionPrompt, config.KeymapVim)
+}
+
+// NewPR builds a picker for PR branches. Rows are labelled with the PR
+// number and title, and the mark/delete/force-update keys are disabled.
+func NewPR(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool, defaultAction, keymap string) Model {
+	m := NewConfigured(items, toplevel, worktreeRoot, noColor, defaultAction, keymap)
+	m.prMode = true
+	return m
 }
 
 func NewConfigured(items []gitdata.Item, toplevel string, worktreeRoot string, noColor bool, defaultAction, keymap string) Model {
@@ -387,19 +396,23 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case msg.String() == "c":
-		m.toggleMarked()
+		if !m.prMode {
+			m.toggleMarked()
+		}
 		return m, nil
 
 	case msg.String() == "D":
-		if len(m.marked) > 0 {
+		if !m.prMode && len(m.marked) > 0 {
 			m.mode = modeConfirmDelete
 		}
 		return m, nil
 
 	case msg.String() == "F":
-		m.forceTargets = m.forceUpdateTargets()
-		if len(m.forceTargets) > 0 {
-			m.mode = modeConfirmForceUpdate
+		if !m.prMode {
+			m.forceTargets = m.forceUpdateTargets()
+			if len(m.forceTargets) > 0 {
+				m.mode = modeConfirmForceUpdate
+			}
 		}
 		return m, nil
 
@@ -450,7 +463,7 @@ func (m *Model) movePage(delta int) {
 func (m *Model) applyFilter() {
 	m.filtered = m.filtered[:0]
 	for i, item := range m.items {
-		if m.filter == "" || strings.Contains(strings.ToLower(item.Branch), strings.ToLower(m.filter)) {
+		if m.filter == "" || strings.Contains(strings.ToLower(itemLabel(item)), strings.ToLower(m.filter)) {
 			m.filtered = append(m.filtered, i)
 		}
 	}
@@ -495,19 +508,32 @@ func (m Model) Marked() []gitdata.Item {
 	return result
 }
 
-// proposeWorktreePath suggests a sibling directory for a new worktree, named
+func (m Model) proposeWorktreePath(branch string) string {
+	return ProposeWorktreePath(m.toplevel, m.worktreeRoot, branch)
+}
+
+// itemLabel is the text shown in the picker. PR rows carry a label with the
+// PR number and title; ordinary rows show their branch name.
+func itemLabel(item gitdata.Item) string {
+	if item.Display != "" {
+		return item.Display
+	}
+	return item.Branch
+}
+
+// ProposeWorktreePath suggests a sibling directory for a new worktree, named
 // after the repository directory plus the branch's last path segment, e.g.
 // branch "feature/login" next to "~/proj" proposes "~/proj-login".
-func (m Model) proposeWorktreePath(branch string) string {
+func ProposeWorktreePath(toplevel, worktreeRoot, branch string) string {
 	segment := branch
 	if i := strings.LastIndex(branch, "/"); i >= 0 {
 		segment = branch[i+1:]
 	}
-	if m.worktreeRoot != "" {
-		return filepath.Join(m.worktreeRoot, filepath.Base(m.toplevel)+"-"+segment)
+	if worktreeRoot != "" {
+		return filepath.Join(worktreeRoot, filepath.Base(toplevel)+"-"+segment)
 	}
-	parent := filepath.Dir(m.toplevel)
-	return filepath.Join(parent, filepath.Base(m.toplevel)+"-"+segment)
+	parent := filepath.Dir(toplevel)
+	return filepath.Join(parent, filepath.Base(toplevel)+"-"+segment)
 }
 
 func isCancel(msg tea.KeyMsg) bool {
@@ -677,9 +703,10 @@ func (m Model) View() string {
 				marker = markedStyle.Render(marker)
 			}
 		}
-		line := fmt.Sprintf("%s %s %-28s", cursor, mark, item.Branch)
+		label := itemLabel(item)
+		line := fmt.Sprintf("%s %s %-28s", cursor, mark, label)
 		if len(m.marked) > 0 {
-			line = fmt.Sprintf("%s %s %s %-28s", cursor, marker, mark, item.Branch)
+			line = fmt.Sprintf("%s %s %s %-28s", cursor, marker, mark, label)
 		}
 		if item.HasWorktree() {
 			tag := "[worktree]"
@@ -750,22 +777,29 @@ func (m Model) visibleRange() (int, int) {
 
 func (m Model) helpView() string {
 	navigation := m.navigationHint()
-	return strings.Join([]string{
+	lines := []string{
 		"Key bindings:",
 		"  navigation : " + navigation,
 		"  page down  : Ctrl-D",
 		"  page up    : Ctrl-U",
 		"  top/bottom : g / G",
 		"  filter     : /  (Esc clears)",
-		"  mark       : c  (selection)",
-		"  delete     : D  (marked branches, asks to confirm; unmerged branches, dirty worktrees, or locked worktrees require typing a phrase)",
-		"  force update: F  (highlighted or marked branches, asks to confirm; resets each to origin/<branch>)",
+	}
+	if !m.prMode {
+		lines = append(lines,
+			"  mark       : c  (selection)",
+			"  delete     : D  (marked branches, asks to confirm; unmerged branches, dirty worktrees, or locked worktrees require typing a phrase)",
+			"  force update: F  (highlighted or marked branches, asks to confirm; resets each to origin/<branch>)",
+		)
+	}
+	lines = append(lines,
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",
 		"",
 		"press any key to return",
-	}, "\n")
+	)
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) navigationHint() string {
