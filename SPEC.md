@@ -155,7 +155,7 @@ or clearing marks. The hint line and `?` overlay document the binding.
 
 ```
 wt                     # interactive picker, default action
-wt pr                  # list open PRs (#number, title, branch) and pick one
+wt pr                  # list open PRs (#number, branch, title) and pick one
 wt pr 123              # switch to the branch of PR #123
 wt --path-only         # print a selected worktree path for shell integration
 wt --worktree-root DIR # base dir for new worktrees (overrides config)
@@ -164,7 +164,7 @@ wt --version / --help
 ```
 
 **Pull requests:** `wt pr` runs `gh pr list --state open --json
-number,title,headRefName` and shows a picker with `#number  title  (branch)`
+number,title,headRefName` and shows a picker with `#number  branch  title`
 rows; `wt pr 123` runs `gh pr view 123 --json ...` and skips the picker. Both
 then call `action.PreparePRBranch(branch, worktreePath, confirm)`: fetch that
 branch from `origin`, create the local branch if missing, or — if the local

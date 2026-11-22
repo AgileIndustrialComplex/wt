@@ -53,7 +53,7 @@ Select branch or worktree (j/k, / to filter, c to mark, ? for help)
 repository.
 
 ```bash
-wt pr          # list open PRs with number, title and branch; pick one to switch to
+wt pr          # list open PRs with number, branch and title; pick one to switch to
 wt pr 123      # switch straight to the branch of PR #123
 ```
 
