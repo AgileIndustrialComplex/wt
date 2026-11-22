@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more branches (and their worktrees, where present) in bulk, via a mark-then-confirm flow, and force-update one or more branches to their upstream tip via a similar confirmation flow. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`, explicitly confirmed `worktree remove --force` or `worktree remove --force --force`, `branch -d`, explicitly confirmed `branch -D`, and confirmed `fetch` + `reset --hard` / `branch -f`) happens only after user confirmation, and only via standard `git` invocations.
+`wt` is a single-binary CLI tool that presents a unified, interactively navigable list of local branches and Git worktrees, and switches the user's shell context to whichever one they select — either by `cd`-ing into an existing worktree or by checking out a branch in the current repository. It can also delete one or more branches (and their worktrees, where present) in bulk, via a mark-then-confirm flow, and force-update one or more branches to their upstream tip via a similar confirmation flow. It can switch to a GitHub pull request branch, picked from the open PRs or given by number, asking before fast-forwarding a local branch that is behind the PR head. It never mutates Git state on its own; every write (checkout, `worktree add`, `worktree remove`, explicitly confirmed `worktree remove --force` or `worktree remove --force --force`, `branch -d`, explicitly confirmed `branch -D`, and confirmed `fetch` + `reset --hard` / `branch -f`) happens only after user confirmation, and only via standard `git` invocations.
 
 ## 2. Technology Choice
 
@@ -21,6 +21,7 @@
 | List and substring filter | Hand-rolled Bubble Tea model | Keeps navigation, filtering, and pagination behavior explicit and small. |
 | Styling | [`lipgloss`](https://github.com/charmbracelet/lipgloss) | Highlights the selected row; `--no-color` disables that styling. |
 | Git interaction | none (shell out to system `git` via `os/exec`) | Avoids embedding a Git implementation (e.g. `go-git`), which is heavyweight and can diverge in behavior from the user's actual Git config/hooks/credential helpers. Shelling out guarantees identical behavior to manual `git` commands. |
+| PR interaction | none (shell out to the system `gh` CLI) | Reuses the user's GitHub login, repo detection and API behavior; `wt` only parses `gh pr list/view --json` output. |
 | CLI flags | Go standard `flag` package | Sufficient for a single-purpose tool and keeps the dependency tree minimal. |
 
 No `fzf` dependency is required, but the design deliberately keeps the same *interaction feel* the user's `fzf` one-liner already provides, while merging branches and worktrees into one list and natively understanding worktree-vs-plain-branch semantics — avoiding the "already checked out elsewhere" dead end of `git switch`.
@@ -34,8 +35,9 @@ No `fzf` dependency is required, but the design deliberately keeps the same *int
           │
 ┌─────────▼───────────┐     ┌──────────────────────┐
 │  gitdata (collector) │────▶│  git branch --list   │
-│                      │     │  git worktree list   │
-│  - parses branches   │     │  git rev-parse ...   │
+│  github (PR reader)  │     │  git worktree list   │
+│                      │     │  git rev-parse ...   │
+│  - parses branches   │     │  gh pr list / view   │
 │  - parses worktrees  │     │  git status          │
 │  - merges into Items │     │    --porcelain       │
 │                      │     └──────────────────────┘
@@ -153,11 +155,26 @@ or clearing marks. The hint line and `?` overlay document the binding.
 
 ```
 wt                     # interactive picker, default action
+wt pr                  # list open PRs (#number, title, branch) and pick one
+wt pr 123              # switch to the branch of PR #123
 wt --path-only         # print a selected worktree path for shell integration
 wt --worktree-root DIR # base dir for new worktrees (overrides config)
 wt --no-color
 wt --version / --help
 ```
+
+**Pull requests:** `wt pr` runs `gh pr list --state open --json
+number,title,headRefName` and shows a picker with `#number  title  (branch)`
+rows; `wt pr 123` runs `gh pr view 123 --json ...` and skips the picker. Both
+then call `action.PreparePRBranch(branch, worktreePath, confirm)`: fetch that
+branch from `origin`, create the local branch if missing, or — if the local
+branch is strictly behind the remote tip — ask `Fast-forward <branch> to
+origin/<branch>? [y/N]` and fast-forward only on yes (`git merge --ff-only`
+in the worktree, `git branch -f` for a plain branch). A branch that has
+diverged is rejected with an error and left untouched. Switching afterwards
+is the same as a normal selection: return the worktree path, or use the
+`[s]witch here / [w]orktree` prompt for a plain branch. `gh` must be installed
+and authenticated for these commands.
 
 **Config file** (`~/.config/wt/config.toml`, optional):
 
@@ -182,6 +199,7 @@ The authoritative collector and action implementations are in
 - Use `t.TempDir()` to create scratch repositories via actual `git init`, `git commit --allow-empty`, and `git worktree add` commands.
 - Drive the action and collection layers against the scratch repository and assert the resulting paths and Git repository state.
 - Cover switching a plain branch, resolving an existing worktree, creating a worktree, deleting marked branches (with and without a worktree), and force-updating both a plain branch and a worktree branch to a remote tip that has advanced locally.
+- Cover PR preparation against a real bare origin: fast-forward on consent, no change on decline, an error on a diverged branch, creation of a missing branch, and a fast-forward inside a worktree. Parser tests cover `gh pr list/view` JSON and exact command shape.
 
 ## 7. Building
 

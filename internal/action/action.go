@@ -4,10 +4,12 @@
 package action
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/AgileIndustrialComplex/wt/internal/gitdata"
 )
@@ -52,6 +54,83 @@ func newWorktreeWith(run runnerFunc, path, branch string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+type outputRunnerFunc func(args ...string) (string, error)
+
+func runGitOutput(args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errBuf.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+	}
+	return out.String(), nil
+}
+
+// PreparePRBranch fetches a PR head branch from origin and makes the local
+// branch ready to switch to. A local branch strictly behind origin/<branch>
+// is fast-forwarded only when confirm returns true; in that case a false
+// return with a nil error means the user declined. A local branch that has
+// diverged is rejected — only a fast-forward is allowed here. A missing
+// local branch is created from the remote tip without asking. path is the
+// branch's worktree, or "" when it has none.
+func PreparePRBranch(branch, path string, confirm func() bool) (bool, error) {
+	return preparePRBranchWith(runGitOutput, branch, path, confirm)
+}
+
+func preparePRBranchWith(run outputRunnerFunc, branch, path string, confirm func() bool) (bool, error) {
+	if _, err := run("fetch", "origin", branch); err != nil {
+		return false, fmt.Errorf("fetch origin %s: %w", branch, err)
+	}
+	ref := "origin/" + branch
+	local, err := run("rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	if err != nil {
+		if _, err := run("branch", branch, ref); err != nil {
+			return false, fmt.Errorf("create %s from %s: %w", branch, ref, err)
+		}
+		return true, nil
+	}
+	remote, err := run("rev-parse", "--verify", "--quiet", ref)
+	if err != nil {
+		return false, fmt.Errorf("branch %s: no %s: %w", branch, ref, err)
+	}
+	if strings.TrimSpace(local) == strings.TrimSpace(remote) {
+		return true, nil
+	}
+	ahead, err := run("rev-list", "--count", ref+".."+branch)
+	if err != nil {
+		return false, err
+	}
+	behind, err := run("rev-list", "--count", branch+".."+ref)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(ahead) != "0" {
+		return false, fmt.Errorf("branch %s has diverged from %s; cannot fast-forward", branch, ref)
+	}
+	if strings.TrimSpace(behind) == "0" {
+		return true, nil
+	}
+	if !confirm() {
+		return false, nil
+	}
+	if path != "" {
+		if _, err := run("-C", path, "merge", "--ff-only", ref); err != nil {
+			return false, fmt.Errorf("fast-forward %s: %w", branch, err)
+		}
+	} else {
+		if _, err := run("branch", "-f", branch, ref); err != nil {
+			return false, fmt.Errorf("fast-forward %s: %w", branch, err)
+		}
+	}
+	return true, nil
 }
 
 // ForceUpdate resets each branch to its upstream tip. It runs a single

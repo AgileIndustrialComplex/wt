@@ -47,6 +47,27 @@ Select branch or worktree (j/k, / to filter, c to mark, ? for help)
   ○ release/2.1              [worktree, locked]
 ```
 
+### Pull requests
+
+`wt pr` needs the GitHub CLI (`gh`) installed and logged in for the current
+repository.
+
+```bash
+wt pr          # list open PRs with number, title and branch; pick one to switch to
+wt pr 123      # switch straight to the branch of PR #123
+```
+
+`wt` fetches the PR head from `origin` first. If the local branch is strictly
+behind `origin/<branch>`, it asks `Fast-forward ...? [y/N]`; only yes runs
+`git merge --ff-only origin/<branch>` in the branch's worktree (or a
+fast-forward ref update for a plain branch). A branch that has diverged is
+reported as an error and left untouched; a missing local branch is created
+from the remote tip without asking. Switching then follows the usual rules:
+a branch with a worktree returns its path, a plain branch shows the
+`[s]witch here / [w]orktree` prompt. `--no-color`, `--worktree-root DIR` and
+`--path-only` work here too. PR heads are resolved as `origin/<branch>`, so
+this covers branches pushed to the repository's `origin`, not fork PR heads.
+
 Optional config file at `~/.config/wt/config.toml`:
 
 ```toml
