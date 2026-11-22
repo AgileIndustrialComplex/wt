@@ -703,3 +703,111 @@ func TestSelectedStyleResumesAfterNestedStyleReset(t *testing.T) {
 		t.Fatalf("renderSelected() = %q, want %q", got, want)
 	}
 }
+
+func TestFKeyWithNoMarksTargetsHighlightedItem(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('F'))
+	if m.mode != modeConfirmForceUpdate {
+		t.Fatalf("mode after F = %v, want modeConfirmForceUpdate", m.mode)
+	}
+	if len(m.forceTargets) != 1 || m.forceTargets[0].Branch != "feature/login" {
+		t.Fatalf("forceTargets = %+v, want [feature/login]", m.forceTargets)
+	}
+}
+
+func TestFKeyWithMarksTargetsWholeMarkedSet(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('c'), key('j'), key('j'), key('c'), key('F'))
+	if m.mode != modeConfirmForceUpdate {
+		t.Fatalf("mode after F with marks = %v, want modeConfirmForceUpdate", m.mode)
+	}
+	if len(m.forceTargets) != 2 || m.forceTargets[0].Branch != "feature/login" || m.forceTargets[1].Branch != "release/2.1" {
+		t.Fatalf("forceTargets = %+v, want [feature/login, release/2.1]", m.forceTargets)
+	}
+}
+
+func TestConfirmForceUpdateEnterQuitsWithTargets(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	next, cmd := m.Update(key('F'))
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("F should not quit the program, got cmd %v", cmd)
+	}
+	m = send(t, m, keyType(tea.KeyEnter))
+	if !m.quitting {
+		t.Fatal("Enter in modeConfirmForceUpdate should quit the program")
+	}
+	res := m.Result()
+	if len(res.ForceUpdate) != 1 || res.ForceUpdate[0].Branch != "main" {
+		t.Fatalf("Result().ForceUpdate = %+v, want [main]", res.ForceUpdate)
+	}
+	if len(res.Delete) != 0 || res.Item.Branch != "" {
+		t.Fatalf("Result() = %+v, want only ForceUpdate set", res)
+	}
+}
+
+func TestConfirmForceUpdateCancelReturnsToListWithoutQuitting(t *testing.T) {
+	for _, k := range []tea.KeyMsg{keyType(tea.KeyEsc), keyType(tea.KeyCtrlC), key('q')} {
+		m := New(testItems(), "/repo/proj", "", true)
+		m = send(t, m, key('j'), key('c'), key('F'), k)
+		if m.mode != modeList {
+			t.Fatalf("mode after %v in modeConfirmForceUpdate = %v, want modeList", k, m.mode)
+		}
+		if m.quitting {
+			t.Fatalf("%v in modeConfirmForceUpdate should not quit the program", k)
+		}
+		if len(m.Marked()) != 1 {
+			t.Fatalf("Marked() after cancelling force update = %+v, want one marked item", m.Marked())
+		}
+	}
+}
+
+func TestFKeyOnDetachedItemIsIgnored(t *testing.T) {
+	items := append(testItems(), gitdata.Item{Branch: "(detached)", Path: "/repo/proj-scratch", Detached: true})
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('G'), key('F'))
+	if m.mode != modeList {
+		t.Fatalf("mode after F on a detached worktree = %v, want modeList", m.mode)
+	}
+}
+
+func TestConfirmForceUpdateViewListsTargetsAndWarnsOnDirty(t *testing.T) {
+	items := testItems()
+	items[1].Dirty = true
+	m := New(items, "/repo/proj", "", true)
+	m = send(t, m, key('j'), key('F'))
+	view := m.View()
+	if !strings.Contains(view, "Force update 1 branch(es)") || !strings.Contains(view, "feature/login") {
+		t.Fatalf("confirm view missing target details:\n%s", view)
+	}
+	if !strings.Contains(view, "uncommitted changes") {
+		t.Fatalf("confirm view missing dirty-worktree warning:\n%s", view)
+	}
+	if !strings.Contains(view, "[Enter] confirm") || !strings.Contains(view, "[Esc] cancel") {
+		t.Fatalf("confirm view missing key hints:\n%s", view)
+	}
+}
+
+func TestViewShowsForceUpdateHintOnlyWhenMarked(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	if strings.Contains(m.View(), "[F] force update") {
+		t.Fatalf("View() with nothing marked should not show a force-update hint:\n%s", m.View())
+	}
+	m = send(t, m, key('j'), key('c'))
+	view := m.View()
+	if !strings.Contains(view, "1 marked") || !strings.Contains(view, "[F] force update") {
+		t.Fatalf("View() with a marked item missing force-update hint:\n%s", view)
+	}
+}
+
+func TestHelpOverlayDocumentsForceUpdateBinding(t *testing.T) {
+	m := New(testItems(), "/repo/proj", "", true)
+	m = send(t, m, key('?'))
+	if m.mode != modeHelp {
+		t.Fatalf("mode after ? = %v, want modeHelp", m.mode)
+	}
+	view := m.View()
+	if !strings.Contains(view, "force update") || !strings.Contains(view, "origin/<branch>") {
+		t.Fatalf("help view missing force-update binding:\n%s", view)
+	}
+}

@@ -26,6 +26,7 @@ const (
 	modeHelp
 	modeConfirmDelete
 	modeConfirmForceDelete
+	modeConfirmForceUpdate
 )
 
 // ForceDeleteConfirmPhrase is the exact text a user must type to delete a
@@ -42,6 +43,7 @@ type Result struct {
 	Resolution      string         // config.ActionSwitch or config.ActionWorktree, set only when Item has no worktree
 	NewWorktreePath string         // suggested path, set only when Resolution == config.ActionWorktree
 	Delete          []gitdata.Item // set when the user confirmed bulk deletion of the marked branches
+	ForceUpdate     []gitdata.Item // set when the user confirmed force-updating branches to their upstream tip
 }
 
 // Model is the bubbletea model for the picker.
@@ -59,7 +61,8 @@ type Model struct {
 	keymap        string
 	height        int
 
-	forceConfirmInput string // typed phrase in modeConfirmForceDelete
+	forceConfirmInput string         // typed phrase in modeConfirmForceDelete
+	forceTargets      []gitdata.Item // branches F will force-update, marked set or highlighted item
 
 	result   Result
 	quitting bool
@@ -119,6 +122,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConfirmDelete(keyMsg)
 	case modeConfirmForceDelete:
 		return m.updateConfirmForceDelete(keyMsg)
+	case modeConfirmForceUpdate:
+		return m.updateConfirmForceUpdate(keyMsg)
 	default:
 		return m.updateList(keyMsg)
 	}
@@ -181,6 +186,41 @@ func (m Model) updateConfirmForceDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// updateConfirmForceUpdate handles the approval step shown after F. Enter
+// quits with the target branches in Result.ForceUpdate; any cancel key
+// returns to the list without quitting or clearing the marked selection.
+func (m Model) updateConfirmForceUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if isCancel(msg) {
+		m.mode = modeList
+		return m, nil
+	}
+	if msg.Type == tea.KeyEnter {
+		m.result = Result{ForceUpdate: m.forceTargets}
+		m.quitting = true
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// forceUpdateTargets returns the branches F acts on: the marked set when
+// non-empty, otherwise the highlighted item. Detached worktrees have no
+// branch to update and are skipped.
+func (m Model) forceUpdateTargets() []gitdata.Item {
+	items := m.Marked()
+	if len(items) == 0 {
+		if item := m.selected(); item != nil {
+			items = []gitdata.Item{*item}
+		}
+	}
+	var targets []gitdata.Item
+	for _, item := range items {
+		if !item.Detached {
+			targets = append(targets, item)
+		}
+	}
+	return targets
 }
 
 // hasUnmergedBranch reports whether any item has unmerged changes on its
@@ -353,6 +393,13 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "D":
 		if len(m.marked) > 0 {
 			m.mode = modeConfirmDelete
+		}
+		return m, nil
+
+	case msg.String() == "F":
+		m.forceTargets = m.forceUpdateTargets()
+		if len(m.forceTargets) > 0 {
+			m.mode = modeConfirmForceUpdate
 		}
 		return m, nil
 
@@ -552,6 +599,21 @@ func (m Model) View() string {
 		}
 		b.WriteString("[Enter] confirm  [Esc] cancel\n")
 		return b.String()
+	case modeConfirmForceUpdate:
+		targets := m.forceTargets
+		fmt.Fprintf(&b, "Force update %d branch(es) to origin/<branch>?\n", len(targets))
+		for _, item := range targets {
+			path := item.Path
+			if path == "" {
+				path = "(no worktree)"
+			}
+			fmt.Fprintf(&b, "  %s  %s\n", item.Branch, path)
+		}
+		if hasDirtyWorktree(targets) {
+			b.WriteString("Warning: uncommitted changes in the listed worktrees will be lost.\n")
+		}
+		b.WriteString("[Enter] confirm  [Esc] cancel\n")
+		return b.String()
 	case modeConfirmForceDelete:
 		marked := m.Marked()
 		if hasUnmergedBranch(marked) {
@@ -658,7 +720,7 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	}
 	if n := len(m.marked); n > 0 {
-		hint := fmt.Sprintf("%d marked — [D] delete\n", n)
+		hint := fmt.Sprintf("%d marked — [D] delete, [F] force update\n", n)
 		if !m.noColor {
 			hint = markedStyle.Render(hint)
 		}
@@ -697,6 +759,7 @@ func (m Model) helpView() string {
 		"  filter     : /  (Esc clears)",
 		"  mark       : c  (selection)",
 		"  delete     : D  (marked branches, asks to confirm; unmerged branches, dirty worktrees, or locked worktrees require typing a phrase)",
+		"  force update: F  (highlighted or marked branches, asks to confirm; resets each to origin/<branch>)",
 		"  confirm    : Enter",
 		"  cancel     : Esc, Ctrl-C, q",
 		"  help       : ?",

@@ -87,6 +87,9 @@ func run(pathOnly bool, worktreeRootFlag string, noColor bool) error {
 	if len(result.Delete) > 0 {
 		return applyDelete(result.Delete)
 	}
+	if len(result.ForceUpdate) > 0 {
+		return applyForceUpdate(result.ForceUpdate)
+	}
 
 	dest, err := applyResult(result)
 	if err != nil {
@@ -113,6 +116,16 @@ func applyDelete(items []gitdata.Item) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wt: deleted %d branch(es)\n", len(items))
+	return nil
+}
+
+// applyForceUpdate resets each confirmed branch to its upstream tip,
+// reporting success to stderr on completion.
+func applyForceUpdate(items []gitdata.Item) error {
+	if err := action.ForceUpdate(items); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "wt: force-updated %d branch(es)\n", len(items))
 	return nil
 }
 

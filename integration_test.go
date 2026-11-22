@@ -92,6 +92,12 @@ func applyResult(t *testing.T, result ui.Result) string {
 		}
 		return ""
 	}
+	if len(result.ForceUpdate) > 0 {
+		if err := action.ForceUpdate(result.ForceUpdate); err != nil {
+			t.Fatalf("action.ForceUpdate: %v", err)
+		}
+		return ""
+	}
 	if result.Item.HasWorktree() {
 		dest, err := action.Switch(result.Item)
 		if err != nil {
@@ -375,6 +381,105 @@ func TestIntegrationDeleteDirtyWorktreeRequiresForcePhrase(t *testing.T) {
 	branches := runGit(t, repo, "branch", "--list", "scratch")
 	if strings.TrimSpace(branches) != "" {
 		t.Fatalf("branch scratch still exists after force delete: %q", branches)
+	}
+}
+
+// initRepoWithRemote initialises repo and pushes its initial commit to a
+// fresh bare origin, returning the origin path.
+func initRepoWithRemote(t *testing.T, repo string) string {
+	t.Helper()
+	initRepo(t, repo)
+	tmp := t.TempDir()
+	remote := filepath.Join(tmp, "origin.git")
+	runGit(t, tmp, "init", "--bare", "-b", "main", remote)
+	runGit(t, repo, "remote", "add", "origin", remote)
+	runGit(t, repo, "push", "-u", "origin", "main")
+	return remote
+}
+
+// cloneOrigin clones remote into a fresh directory and configures a committer.
+func cloneOrigin(t *testing.T, remote string) string {
+	t.Helper()
+	parent := t.TempDir()
+	clone := filepath.Join(parent, "clone")
+	runGit(t, parent, "clone", remote, clone)
+	runGit(t, clone, "config", "user.email", "wt-test@example.com")
+	runGit(t, clone, "config", "user.name", "wt test")
+	runGit(t, clone, "config", "commit.gpgsign", "false")
+	return clone
+}
+
+func TestIntegrationForceUpdatePlainBranchToRemoteTip(t *testing.T) {
+	repo := t.TempDir()
+	remote := initRepoWithRemote(t, repo)
+
+	// Advance origin/main from a second clone so the local repo is behind.
+	other := cloneOrigin(t, remote)
+	runGit(t, other, "commit", "--allow-empty", "-m", "remote commit")
+	runGit(t, other, "push", "origin", "main")
+	want := strings.TrimSpace(runGit(t, other, "rev-parse", "main"))
+
+	chdir(t, repo)
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	// main is highlighted at cursor 0: F then Enter confirms the force update.
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keyRune('F'), keyEnter)
+	if len(result.ForceUpdate) != 1 || result.ForceUpdate[0].Branch != "main" {
+		t.Fatalf("result.ForceUpdate = %+v, want [main]", result.ForceUpdate)
+	}
+	applyResult(t, result)
+
+	if got := strings.TrimSpace(runGit(t, repo, "rev-parse", "main")); got != want {
+		t.Fatalf("main = %s, want remote tip %s", got, want)
+	}
+}
+
+func TestIntegrationForceUpdateWorktreeBranchToRemoteTip(t *testing.T) {
+	repo := t.TempDir()
+	remote := initRepoWithRemote(t, repo)
+	runGit(t, repo, "branch", "feature/x")
+	runGit(t, repo, "push", "origin", "feature/x")
+
+	// Advance origin/feature/x from a second clone.
+	other := cloneOrigin(t, remote)
+	runGit(t, other, "checkout", "-b", "feature/x", "origin/feature/x")
+	runGit(t, other, "commit", "--allow-empty", "-m", "remote feature commit")
+	runGit(t, other, "push", "origin", "feature/x")
+	want := strings.TrimSpace(runGit(t, other, "rev-parse", "feature/x"))
+
+	// The local worktree diverges with its own commit.
+	wtDir := filepath.Join(t.TempDir(), "feature-x-checkout")
+	runGit(t, repo, "worktree", "add", wtDir, "feature/x")
+	runGit(t, wtDir, "commit", "--allow-empty", "-m", "local divergence")
+	chdir(t, repo)
+
+	items, err := gitdata.Collect()
+	if err != nil {
+		t.Fatalf("gitdata.Collect: %v", err)
+	}
+	top, err := gitdata.Toplevel()
+	if err != nil {
+		t.Fatalf("gitdata.Toplevel: %v", err)
+	}
+
+	// order: main (cursor 0, current), feature/x (cursor 1) -> down, mark, F, Enter.
+	m := ui.New(items, top, "", true)
+	result := drivePicker(t, m, keyDown, keyRune('c'), keyRune('F'), keyEnter)
+	if len(result.ForceUpdate) != 1 || result.ForceUpdate[0].Branch != "feature/x" {
+		t.Fatalf("result.ForceUpdate = %+v, want [feature/x]", result.ForceUpdate)
+	}
+	applyResult(t, result)
+
+	if got := strings.TrimSpace(runGit(t, wtDir, "rev-parse", "HEAD")); got != want {
+		t.Fatalf("feature/x worktree HEAD = %s, want remote tip %s", got, want)
 	}
 }
 
